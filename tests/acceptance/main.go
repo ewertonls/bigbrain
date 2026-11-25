@@ -321,7 +321,12 @@ func main() {
 		runMemoryEvaluation(cli{bin: os.Args[2], db: filepath.Join(root, "memory")}, os.Args[3])
 		return
 	}
-	require(len(os.Args) == 3, "usage: acceptance BIGBRAIN FAULT_TEST_BIGBRAIN or acceptance --memory BIGBRAIN FIXTURE")
+	if len(os.Args) == 3 && os.Args[1] == "--learning" {
+		verifyLearning(cli{bin: os.Args[2], db: filepath.Join(root, "learning")})
+		check(json.NewEncoder(os.Stdout).Encode(map[string][]string{"passed_checks": {learningCheck}}))
+		return
+	}
+	require(len(os.Args) == 3, "usage: acceptance BIGBRAIN FAULT_TEST_BIGBRAIN | --memory BIGBRAIN FIXTURE | --learning BIGBRAIN")
 	orbit := production("orbit")
 	require(!status(orbit).Running, "new database reported a running daemon")
 	help := exec.Command(orbit.bin, "--db", orbit.db, "help")
@@ -349,6 +354,8 @@ func main() {
 	verifyWorktrees(production("worktrees"), root)
 	verifyReadOnly(orbit, f)
 	fmt.Fprintln(os.Stderr, "Passed scope isolation, worktree configuration, and read-only query checks")
+	verifyLearning(production("learning"))
+	fmt.Fprintln(os.Stderr, "Passed publication, project feedback and reconciliation across projects")
 
 	verifyStartup(production("simultaneous"))
 	fmt.Fprintln(os.Stderr, "Passed simultaneous startup and persisted writes")
@@ -371,7 +378,7 @@ func main() {
 	}{
 		[]string{"cross_session_retrieval", "association_control", "scope_isolation", "git_worktrees", "read_only_query",
 			"simultaneous_startup", "protocol_version", "database_preservation",
-			"crash_before_commit", "crash_after_commit", "delete_before_commit", "delete_after_commit", "graceful_shutdown", "repeated_shutdown"},
+			"crash_before_commit", "crash_after_commit", "delete_before_commit", "delete_after_commit", "graceful_shutdown", "repeated_shutdown", learningCheck},
 		scores, reopenMS,
 	}))
 }

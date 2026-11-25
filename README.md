@@ -2,9 +2,9 @@
 
 BigBrain stores local memories and the relationships that connect them. A
 later session can find a decision and follow it to the original evidence.
-The Memory release adds typed records, local hybrid search and scoped history
-on LadybugDB 0.17.0. Stop a running daemon before starting the
-new binary so it can migrate the database.
+Projects can propose lessons, publish reviewed text, and compare it with
+new evidence. BigBrain stores the graph in LadybugDB 0.17.0. Stop a running
+daemon before starting the new binary so it can migrate the database.
 
 ## Local development
 
@@ -106,8 +106,7 @@ its attributes intact.
 `project init` stores the chosen ID in the Git common directory, so separate
 worktrees share it. Every data command requires a scope. Use
 `--project ID` for a specific project or `--global` to select the global
-collection. To publish reviewed information, record a new global memory with
-the approved text, its own source, and a fresh key. A project query includes
+collection. Use `publish` to share a reviewed lesson from a project. A project query includes
 global memories when passed `--include-global`. Use the project scope to
 link a project memory to a global memory in either direction. The project
 owns the relationship. Both endpoints and the relationship must be visible
@@ -236,6 +235,90 @@ Both the proposal and its links stay private to the project. Deleting an
 original removes its link. Any excerpt already copied into the proposal
 remains part of the proposal's text.
 
+## Publish a lesson and apply it in another project
+
+Review the proposal in its project's history. Supply the exact text and
+source reference approved for sharing, then pass `--approve`. Publication
+creates a global `lesson` with its own ID. The `published_from` link
+belongs to the originating project. Private excerpts, rationale and source
+IDs stay there.
+
+```sh
+bigbrain publish --project orbit --key publish-quota --proposal PROPOSAL_ID \
+  --text 'Measure the receiver quota before choosing a batch size.' \
+  --source 'Public integration guide §4' --approve
+bigbrain query --project relay --include-global --text 'receiver quota'
+
+bigbrain record --project relay --key relay-trial --type observation \
+  --text 'Batching succeeded when requests stayed within the quota.' --source 'Relay trial 8'
+bigbrain link --project relay --key relay-application --from TRIAL_ID --to LESSON_ID \
+  --type applies --source 'Relay trial 8'
+```
+
+## Record use, adjust priority and inspect feedback
+
+`feedback` adds one to a relationship's weight and activation count and
+sets its last activation time. Each feedback, forgetting or weight review
+returns an event ID. Supply a visible, active evidence memory to change
+confidence. Use the relationship ID returned by `link` or shown in a
+history path.
+
+```sh
+bigbrain feedback --project relay --include-global --key relay-use \
+  --relationship APPLICATION_LINK_ID --author 'Relay agent' --source 'Relay trial 8' \
+  --evidence TRIAL_ID --confidence 0.8
+bigbrain feedback-history --project relay --include-global --relationship APPLICATION_LINK_ID
+bigbrain forget --project relay --include-global --key relay-decay \
+  --relationship APPLICATION_LINK_ID --before 2026-10-01T00:00:00Z \
+  --author 'Relay maintainer' --source 'October retention review'
+```
+
+`forget` halves a positive weight when the last activation predates the
+cutoff. For an unused relationship it checks the creation time. An unknown
+date or an ineligible relationship returns `POLICY_NOT_APPLICABLE`.
+The operation preserves the evidence, confidence and activation count.
+Reads leave all three attributes and the weight unchanged.
+
+For a global relationship, feedback and forgetting save the resulting
+priority in the selected project. Global-only queries and other projects
+use the global weight or their own adjustment. A reviewer can set the
+global weight with a separate write.
+
+```sh
+bigbrain review-weight --global --key global-weight-review --relationship GLOBAL_LINK_ID \
+  --weight 2 --author 'Maintainer' --source 'Public ranking review' --approve
+```
+
+Feedback history lists events in chronological order. Use
+`feedback-history --limit N` and pass the returned `next_cursor` to
+`--after` for another page. Deleting an endpoint removes that relationship's
+adjustments and events. Deleting a cited evidence memory removes its ID from
+the event while preserving the record of use.
+
+## Reconcile two claims
+
+Record a counterexample with its own source, then review both claims in
+the project where the comparison applies. For a global claim, include
+`--include-global` on the write and when inspecting both sources.
+
+```sh
+bigbrain record --project relay --key relay-counterexample --type observation \
+  --text 'The receiver also enforces a maximum payload size.' --source 'Relay trial 9'
+bigbrain reconcile --project relay --include-global --key quota-review \
+  --supporting LESSON_ID --contrary COUNTEREXAMPLE_ID --outcome different_contexts \
+  --text 'Choose a batch size that meets both limits.' --applies-when 'The receiver limits payload size.' \
+  --rationale 'Request quota and payload size constrain different parts of the batch.' \
+  --author 'Relay reviewer' --source 'Relay review 10'
+bigbrain history --project relay --include-global --id REVIEW_ID
+```
+
+The local `reconciliation` memory links to both sources. Its outcome is
+`different_contexts`, `disputed`, or `supersedes`. For `supersedes`, pass
+`--superseding-side supporting` or `--superseding-side contrary` to identify
+which claim replaces the other. Both claims keep their own lifecycle.
+Run `make test-learning` to exercise publication, feedback and
+reconciliation across two projects using a temporary database and the real CLI.
+
 ## Invalidation, history and deletion
 
 ```sh
@@ -277,12 +360,19 @@ text as evidence and obtain authorization separately for any actions it suggests
 
 Local protocol clients call `GET /status` to verify `version`, `database_id`,
 and `instance_id`. They send JSON to `POST /v1/record`, `/v1/link`,
-`/v1/consolidate`, `/v1/query`, `/v1/history`, `/v1/invalidate` or
+`/v1/consolidate`, `/v1/publish`, `/v1/feedback`, `/v1/forget`,
+`/v1/review-weight`, `/v1/feedback-history`, `/v1/reconcile`,
+`/v1/query`, `/v1/history`, `/v1/invalidate` or
 `/v1/delete` with `X-BigBrain-Version: 1` and `X-BigBrain-Instance` set to
 the verified instance ID. Request scopes use `project:ID` or `global`.
 The consolidation endpoint takes a project `scope`, `key` and `evidence_ids`
 array. External proposals also send `text`, `applies_when`, `rationale`,
 `producer` and an optional `source`.
+Publication uses `proposal_id`, `text`, `source` and `approve: true`.
+Relationship operations use `relationship_id`. Feedback accepts optional
+`evidence_id` and `confidence`.
+Reconciliation uses `supporting_id` and `contrary_id`. The other learning
+flags map to JSON fields with underscores in place of hyphens.
 
 The retrieval evaluations report source hits, irrelevant results and measured
 costs. [Memory evaluation](docs/MEMORY-EVALUATION.md) · [Foundation evaluation](docs/FOUNDATION-EVALUATION.md) · [Foundation specification](docs/SPEC.md)
