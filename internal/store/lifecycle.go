@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/ewertonls/bigbrain/internal/protocol"
@@ -50,6 +51,45 @@ func removedFingerprint(operation, scope, payloadHash string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+const incidentEdges = "MATCH (:Memory {id:$id})-[e:Evidence]-(:Memory) "
+const incidentEvents = incidentEdges + "MATCH (f:FeedbackEvent) WHERE f.relationship_id=e.id "
+
+func (s *Store) tombstoneCreationReceipts(id string) error {
+	rows, err := s.query(`
+MATCH (r:Receipt) WHERE r.operation IN ['record', 'consolidate', 'publish', 'reconcile'] AND r.result_id=$id
+RETURN r.key, r.operation, r.scope, r.fingerprint
+UNION
+`+incidentEdges+`MATCH (r:Receipt) WHERE r.operation='link' AND r.result_id=e.id
+RETURN r.key, r.operation, r.scope, r.fingerprint
+UNION
+`+incidentEvents+`MATCH (r:Receipt) WHERE r.operation IN ['feedback', 'forget', 'review-weight'] AND r.result_id=f.id
+RETURN r.key, r.operation, r.scope, r.fingerprint;`, map[string]any{"id": id})
+	if err != nil {
+		return err
+	}
+	// The binding materializes the entire list in native memory on each call.
+	for batch := range slices.Chunk(rows, 1024) {
+		tombstones := make([][]string, 0, len(batch))
+		for _, row := range batch {
+			key, okKey := row[0].(string)
+			op, okOp := row[1].(string)
+			scope, okScope := row[2].(string)
+			hash, okHash := row[3].(string)
+			if !okKey || !okOp || !okScope || !okHash {
+				return errors.New("invalid creation receipt")
+			}
+			tombstones = append(tombstones, []string{key, removedFingerprint(op, scope, hash)})
+		}
+		_, err := s.query(`UNWIND CAST($tombstones AS STRING[][]) AS entry
+MATCH (r:Receipt {key:entry[1]})
+SET r.operation=NULL, r.scope=NULL, r.result_id=NULL, r.fingerprint=entry[2], r.deleted=true;`, map[string]any{"tombstones": tombstones})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Store) Delete(r protocol.MemoryWriteRequest) (protocol.WriteResult, error) {
 	if err := r.Validate(); err != nil {
 		return protocol.WriteResult{}, err
@@ -60,32 +100,20 @@ func (s *Store) Delete(r protocol.MemoryWriteRequest) (protocol.WriteResult, err
 		}
 		// A global deletion also removes incident project-owned edges. Their
 		// receipts are updated here without returning their IDs or sources.
-		rows, err := s.query(`
-MATCH (r:Receipt) WHERE r.operation IN ['record', 'consolidate'] AND r.result_id=$id
-RETURN r.key, r.operation, r.scope, r.fingerprint
-UNION
-MATCH (:Memory {id:$id})-[e:Evidence]-(:Memory), (r:Receipt)
-WHERE r.operation='link' AND r.result_id=e.id
-RETURN r.key, r.operation, r.scope, r.fingerprint;`, map[string]any{"id": id})
-		if err != nil {
+		if err := s.tombstoneCreationReceipts(id); err != nil {
 			return err
 		}
-		for _, row := range rows {
-			key, okKey := row[0].(string)
-			op, okOp := row[1].(string)
-			scope, okScope := row[2].(string)
-			hash, okHash := row[3].(string)
-			if !okKey || !okOp || !okScope || !okHash {
-				return errors.New("invalid creation receipt")
-			}
-			_, err = s.query(`MATCH (r:Receipt {key:$key})
-SET r.operation=NULL, r.scope=NULL, r.result_id=NULL, r.fingerprint=$hash, r.deleted=true;`,
-				map[string]any{"key": key, "hash": removedFingerprint(op, scope, hash)})
-			if err != nil {
+		params := map[string]any{"id": id}
+		for _, statement := range []string{
+			incidentEvents + "WITH DISTINCT f DELETE f;",
+			incidentEdges + "MATCH (a:EdgeAdjustment) WHERE a.relationship_id=e.id WITH DISTINCT a DELETE a;",
+			"MATCH (f:FeedbackEvent {evidence_id:$id}) SET f.evidence_id=NULL;",
+			"MATCH (m:Memory {id:$id}) DETACH DELETE m;",
+		} {
+			if _, err := s.query(statement, params); err != nil {
 				return err
 			}
 		}
-		_, err = s.query("MATCH (m:Memory {id:$id, scope:$scope}) DETACH DELETE m;", map[string]any{"id": id, "scope": r.Scope})
-		return err
+		return nil
 	})
 }

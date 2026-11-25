@@ -15,11 +15,22 @@ import (
 	"github.com/ewertonls/bigbrain/internal/protocol"
 )
 
+func projectOnlyCommand(name string) bool {
+	switch name {
+	case "consolidate", "publish", "feedback", "forget", "reconcile":
+		return true
+	}
+	return false
+}
+
 func (s scopeOptions) resolve(flags *flag.FlagSet) (string, error) {
 	explicit := false
 	flags.Visit(func(f *flag.Flag) {
 		explicit = explicit || f.Name == "project"
 	})
+	if flags.Name() == "review-weight" && (!s.global || explicit || s.current) {
+		return "", protocol.NewError("INVALID_SCOPE", "Choose --global for a reviewed global weight change.")
+	}
 	if s.current && !explicit && !s.global {
 		path, err := projectFile()
 		if err != nil {
@@ -34,7 +45,7 @@ func (s scopeOptions) resolve(flags *flag.FlagSet) (string, error) {
 	if explicit && !s.current && !s.global && protocol.ValidProjectID(s.project) {
 		return "project:" + s.project, nil
 	}
-	if flags.Name() == "consolidate" {
+	if projectOnlyCommand(flags.Name()) {
 		return "", protocol.NewError("INVALID_SCOPE", "Choose --project ID or --current-project for "+flags.Name()+".")
 	}
 	if s.global && !explicit && !s.current {

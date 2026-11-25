@@ -16,7 +16,7 @@ import (
 const originalEvidence = `
 UNWIND CAST($ids AS STRING[]) AS evidenceID
 MATCH (e:Memory {id: evidenceID, scope: $scope, status: 'active'})
-WHERE e.memory_type <> 'lesson_proposal'`
+WHERE NOT (e.memory_type IN ['lesson_proposal', 'reconciliation'])`
 
 func unavailableEvidence() error {
 	return protocol.NewError("NOT_FOUND", "One or more original memories are unavailable in the selected project.")

@@ -23,6 +23,12 @@ Commands:
   record           Store a memory with its source.
   link             Connect memories within a scope or between a project and global.
   consolidate      Propose a local lesson from project evidence.
+  publish          Publish the approved text and source of a project lesson.
+  feedback         Record use of a relationship in a project.
+  forget           Lower a relationship's priority based on its last use.
+  review-weight    Approve a change to a global relationship's priority.
+  feedback-history Inspect recorded uses and priority changes for a relationship.
+  reconcile        Review two claims and record a project conclusion.
   query            Search memories or look up an ID.
   invalidate       Hide a memory and preserve its history.
   history          Inspect a memory and its visible relationships.
@@ -175,7 +181,7 @@ func execute(args []string, options *options) (any, error) {
 	flags.StringVar(&scope.project, "project", "", "select project `ID`")
 	flags.BoolVar(&scope.current, "current-project", false, "use the project configured for this Git worktree")
 	globalUsage := "select the global collection"
-	if command == "consolidate" {
+	if projectOnlyCommand(command) {
 		globalUsage = "unavailable for this project operation"
 	}
 	flags.BoolVar(&scope.global, "global", false, globalUsage)
@@ -204,6 +210,42 @@ func execute(args []string, options *options) (any, error) {
 	case "consolidate":
 		var request protocol.ConsolidateRequest
 		consolidateFlags(flags, &request)
+		return dataCommand[protocol.WriteResult](flags, args, &scope, options, &request.Scope, &request)
+	case "publish":
+		var request protocol.PublishRequest
+		flags.StringVar(&request.Key, "key", "", "idempotency key (required)")
+		flags.StringVar(&request.ProposalID, "proposal", "", "active project proposal ID")
+		flags.StringVar(&request.Text, "text", "", "exact text approved for global publication")
+		flags.StringVar(&request.Source, "source", "", "approved public source reference")
+		flags.BoolVar(&request.Approve, "approve", false, "approve publication of the supplied text and source")
+		return dataCommand[protocol.WriteResult](flags, args, &scope, options, &request.Scope, &request)
+	case "feedback":
+		var request protocol.FeedbackRequest
+		feedbackTargetFlags(flags, &request.FeedbackTarget)
+		flags.StringVar(&request.EvidenceID, "evidence", "", "supporting memory ID (required for confidence changes)")
+		optionalFloatFlag(flags, "confidence", &request.Confidence, "revised confidence from 0 to 1")
+		return dataCommand[protocol.WriteResult](flags, args, &scope, options, &request.Scope, &request)
+	case "forget":
+		var request protocol.ForgetRequest
+		feedbackTargetFlags(flags, &request.FeedbackTarget)
+		flags.StringVar(&request.Before, "before", "", "halve the weight if the last use or creation predates this RFC 3339 timestamp")
+		return dataCommand[protocol.WriteResult](flags, args, &scope, options, &request.Scope, &request)
+	case "review-weight":
+		var request protocol.ReviewWeightRequest
+		feedbackTargetFlags(flags, &request.FeedbackTarget)
+		optionalFloatFlag(flags, "weight", &request.Weight, "approved nonnegative global weight")
+		flags.BoolVar(&request.Approve, "approve", false, "approve this global weight change")
+		return dataCommand[protocol.WriteResult](flags, args, &scope, options, &request.Scope, &request)
+	case "feedback-history":
+		var request protocol.FeedbackHistoryRequest
+		flags.StringVar(&request.RelationshipID, "relationship", "", "relationship ID")
+		flags.BoolVar(&request.IncludeGlobal, "include-global", false, "include global relationships and reviews")
+		flags.IntVar(&request.Limit, "limit", protocol.DefaultQueryLimit, "maximum events per page")
+		flags.StringVar(&request.After, "after", "", "event cursor from the previous page")
+		return dataCommand[protocol.FeedbackHistoryResult](flags, args, &scope, options, &request.Scope, &request)
+	case "reconcile":
+		var request protocol.ReconcileRequest
+		reconcileFlags(flags, &request)
 		return dataCommand[protocol.WriteResult](flags, args, &scope, options, &request.Scope, &request)
 	case "invalidate":
 		var request protocol.InvalidateRequest
@@ -249,6 +291,30 @@ func optionalIntFlag(flags *flag.FlagSet, name string, dest **int, usage string)
 		*dest = &n
 		return nil
 	})
+}
+
+func feedbackTargetFlags(flags *flag.FlagSet, r *protocol.FeedbackTarget) {
+	flags.StringVar(&r.Key, "key", "", "idempotency key (required)")
+	flags.StringVar(&r.RelationshipID, "relationship", "", "relationship ID")
+	flags.StringVar(&r.Author, "author", "", "person or agent responsible for this write")
+	flags.StringVar(&r.Source, "source", "", "source reference for this write")
+	if flags.Name() != "review-weight" {
+		flags.BoolVar(&r.IncludeGlobal, "include-global", false, "allow visible global records for this project write")
+	}
+}
+
+func reconcileFlags(flags *flag.FlagSet, r *protocol.ReconcileRequest) {
+	flags.StringVar(&r.Key, "key", "", "idempotency key (required)")
+	flags.StringVar(&r.SupportingID, "supporting", "", "supporting claim ID")
+	flags.StringVar(&r.ContraryID, "contrary", "", "contrary claim ID")
+	flags.StringVar(&r.Outcome, "outcome", "", "different_contexts, disputed or supersedes")
+	flags.StringVar(&r.SupersedingSide, "superseding-side", "", "claim that supersedes the other: supporting or contrary")
+	flags.StringVar(&r.Text, "text", "", "review conclusion")
+	flags.StringVar(&r.AppliesWhen, "applies-when", "", "conditions where the conclusion applies")
+	flags.StringVar(&r.Rationale, "rationale", "", "why the claims support this conclusion")
+	flags.StringVar(&r.Author, "author", "", "reviewer")
+	flags.StringVar(&r.Source, "source", "", "review source reference")
+	flags.BoolVar(&r.IncludeGlobal, "include-global", false, "allow global claims")
 }
 
 func optionalFloatFlag(flags *flag.FlagSet, name string, dest **float64, usage string) {
@@ -430,9 +496,13 @@ func helpText(flags *flag.FlagSet) string {
 	default:
 		fmt.Fprintf(&out, "Usage: bigbrain %s [flags]\n", flags.Name())
 	}
-	if flags.Name() == "consolidate" {
+	if projectOnlyCommand(flags.Name()) {
 		out.WriteString("\nChoose -project ID or -current-project.\n")
-		out.WriteString("For an external proposal, supply -text, -applies-when, -rationale, and -producer together.\n")
+		if flags.Name() == "consolidate" {
+			out.WriteString("For an external proposal, supply -text, -applies-when, -rationale, and -producer together.\n")
+		}
+	} else if flags.Name() == "review-weight" {
+		out.WriteString("\nChoose -global for this reviewed write.\n")
 	} else if flags.Lookup("project") != nil {
 		out.WriteString("\nChoose exactly one scope: -project ID, -current-project, or -global.\n")
 	}

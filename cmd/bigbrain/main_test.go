@@ -152,3 +152,16 @@ func TestJSONOutputWithHelpAndInvalidFlags(t *testing.T) {
 		})
 	}
 }
+
+func TestGlobalWeightReviewRejectsProjectSelectionOutsideGit(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"review-weight", "--current-project", "--json"}, &stdout, &stderr)
+	var response protocol.Response
+	if jsonErr := json.Unmarshal(stdout.Bytes(), &response); jsonErr != nil {
+		t.Fatal(jsonErr)
+	}
+	if err == nil || response.Error == nil || response.Error.Code != "INVALID_SCOPE" || stderr.Len() != 0 {
+		t.Fatalf("expected a JSON scope error, got %+v, err %v, stderr %q", response, err, &stderr)
+	}
+}

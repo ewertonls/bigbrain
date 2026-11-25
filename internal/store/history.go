@@ -18,7 +18,8 @@ func (s *Store) History(r protocol.HistoryRequest) (protocol.HistoryResult, erro
 	params["id"] = r.ID
 	rows, err := s.query("MATCH (m:Memory {id:$id}) WHERE "+visibleMemory+" RETURN "+memoryColumns+
 		`, m.status, [m.invalid_reason, m.invalid_source, m.invalid_at],
-		[m.proposal_origin, m.proposal_producer, m.proposal_applies_when, m.proposal_rationale];`, params)
+		[m.proposal_origin, m.proposal_producer, m.proposal_applies_when, m.proposal_rationale],
+		[m.review_outcome, m.review_superseding_side, m.review_applies_when, m.review_rationale, m.review_author];`, params)
 	if err != nil {
 		return history, err
 	}
@@ -30,12 +31,19 @@ func (s *Store) History(r protocol.HistoryRequest) (protocol.HistoryResult, erro
 	if err != nil {
 		return history, err
 	}
-	if history.Memory.Type == "lesson_proposal" {
+	switch history.Memory.Type {
+	case "lesson_proposal":
 		var proposal protocol.Proposal
 		if !readHistoryFields(row[8], &proposal.Origin, &proposal.Producer, &proposal.AppliesWhen, &proposal.Rationale) {
 			return history, errors.New("invalid lesson proposal metadata")
 		}
 		history.Proposal = &proposal
+	case "reconciliation":
+		var review protocol.Reconciliation
+		if !readHistoryFields(row[9], &review.Outcome, &review.SupersedingSide, &review.AppliesWhen, &review.Rationale, &review.Author) {
+			return history, errors.New("invalid reconciliation metadata")
+		}
+		history.Reconciliation = &review
 	}
 	history.Status, _ = row[6].(string)
 	switch history.Status {
@@ -95,13 +103,13 @@ func (s *Store) visibleEdges(r protocol.HistoryRequest, activeOnly bool) ([]prot
 		end = " ORDER BY edge.id LIMIT " + strconv.Itoa(r.Limit+1)
 	}
 	edges := make([]protocol.RelatedMemory, 0)
+	join, attributes := edgeAttributeProjection(r.IncludeGlobal)
 	for _, walk := range []struct{ pattern, direction string }{{"-[edge:Evidence]->", "forward"}, {"<-[edge:Evidence]-", "reverse"}} {
 		rows, err := s.query("MATCH (seed:Memory {id:$id})"+walk.pattern+`(neighbor:Memory)
 WHERE (seed.scope=$scope OR seed.scope=$extraScope) AND (edge.scope=$scope OR edge.scope=$extraScope)
-  AND (neighbor.scope=$scope OR neighbor.scope=$extraScope)`+filter+`
+  AND (neighbor.scope=$scope OR neighbor.scope=$extraScope)`+filter+join+`
 RETURN neighbor.id, neighbor.scope, neighbor.memory_type, neighbor.status, neighbor.source,
-       edge.id, edge.scope, edge.kind, edge.source, edge.weight,
-       edge.confidence, edge.activation_count, coalesce(edge.last_activated_at, ''), coalesce(edge.created_at, '')`+end, params)
+       edge.id, edge.scope, edge.kind, edge.source, `+attributes+`, coalesce(edge.created_at, '')`+end, params)
 		if err != nil {
 			return nil, err
 		}

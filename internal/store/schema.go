@@ -49,6 +49,15 @@ var migrations = [][]string{
 		"ALTER TABLE Memory ADD proposal_applies_when STRING;",
 		"ALTER TABLE Memory ADD proposal_rationale STRING;",
 	},
+	{
+		"CREATE NODE TABLE EdgeAdjustment(id STRING, scope STRING, relationship_id STRING, weight DOUBLE, confidence DOUBLE, activation_count INT64, last_activated_at STRING, PRIMARY KEY(id));",
+		"CREATE NODE TABLE FeedbackEvent(id STRING, scope STRING, relationship_id STRING, action STRING, author STRING, source STRING, evidence_id STRING, recorded_at STRING, weight DOUBLE, confidence DOUBLE, activation_count INT64, last_activated_at STRING, cutoff STRING, PRIMARY KEY(id));",
+		"ALTER TABLE Memory ADD review_outcome STRING;",
+		"ALTER TABLE Memory ADD review_superseding_side STRING;",
+		"ALTER TABLE Memory ADD review_applies_when STRING;",
+		"ALTER TABLE Memory ADD review_rationale STRING;",
+		"ALTER TABLE Memory ADD review_author STRING;",
+	},
 }
 
 func (s *Store) openSchema() error {
@@ -99,6 +108,9 @@ func (s *Store) checkSchema() error {
 	for _, statement := range []string{
 		"MATCH (m:Memory) RETURN m.id, m.scope, m.text, m.source, m.recorded_at, m.memory_type, m.status, m.invalid_reason, m.invalid_source, m.invalid_at LIMIT 0;",
 		"MATCH (m:Memory) RETURN m.proposal_origin, m.proposal_producer, m.proposal_applies_when, m.proposal_rationale LIMIT 0;",
+		"MATCH (m:Memory) RETURN m.review_outcome, m.review_superseding_side, m.review_applies_when, m.review_rationale, m.review_author LIMIT 0;",
+		"MATCH (a:EdgeAdjustment) RETURN a.id, a.scope, a.relationship_id, a.weight, a.confidence, a.activation_count, a.last_activated_at LIMIT 0;",
+		"MATCH (f:FeedbackEvent) RETURN f.id, f.scope, f.relationship_id, f.action, f.author, f.source, f.evidence_id, f.recorded_at, f.weight, f.confidence, f.activation_count, f.last_activated_at, f.cutoff LIMIT 0;",
 		"MATCH (r:Receipt) RETURN r.key, r.operation, r.scope, r.fingerprint, r.result_id, r.deleted LIMIT 0;",
 		"MATCH (:Memory)-[r:Evidence]->(:Memory) RETURN r.id, r.kind, r.weight, r.source, r.scope, r.confidence, r.activation_count, r.last_activated_at, r.created_at LIMIT 0;",
 	} {

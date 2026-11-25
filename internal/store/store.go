@@ -105,6 +105,8 @@ MATCH (a:Memory {id: $from}), (b:Memory {id: $to})
 WHERE (a.scope = $scope OR a.scope = 'global') AND (b.scope = $scope OR b.scope = 'global')
   AND (a.scope = $scope OR b.scope = $scope) AND a.status = 'active' AND b.status = 'active'
   AND ($kind <> 'derived_from' OR a.memory_type <> 'lesson_proposal')
+  AND ($kind <> 'published_from' OR a.memory_type <> 'lesson')
+  AND (NOT ($kind IN ['supporting_claim', 'contrary_claim']) OR a.memory_type <> 'reconciliation')
 CREATE (a)-[:Evidence {id: $id, scope: $scope, kind: $kind, weight: $weight, source: $source,
                        confidence: $confidence, activation_count: 0, created_at: $createdAt}]->(b)
 RETURN a.id;`, map[string]any{
@@ -175,7 +177,10 @@ CREATE (:Receipt {key: $key, operation: $operation, scope: $scope, fingerprint: 
 		return protocol.WriteResult{}, err
 	}
 	committed = true
-	if operation != "link" {
+	switch operation {
+	case "publish":
+		delete(s.indexes, "global")
+	case "record", "invalidate", "delete", "consolidate", "reconcile":
 		delete(s.indexes, scope)
 	}
 	if s.AfterCommit != nil {

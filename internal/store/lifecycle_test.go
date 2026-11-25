@@ -11,6 +11,40 @@ import (
 	"github.com/ewertonls/bigbrain/internal/protocol"
 )
 
+func TestDeleteGlobalEndpointRemovesPrivateFeedback(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "learning.lbug")
+	db := openTestStore(t, path)
+	g := propagationFixture{t, db}
+	origin := g.record("global", "shared decision")
+	target := g.record("global", "shared test")
+	edge := g.link("global", "shared evidence", origin, target, 1, nil)
+	var uses []protocol.FeedbackRequest
+	for _, project := range []string{"project:A", "project:B"} {
+		use := protocol.FeedbackRequest{FeedbackTarget: protocol.FeedbackTarget{
+			Scope: project, IncludeGlobal: true, Key: project + "-use", RelationshipID: edge, Author: project, Source: "Trial",
+		}}
+		if _, err := db.Feedback(use); err != nil {
+			t.Fatal(err)
+		}
+		uses = append(uses, use)
+	}
+	if _, err := db.Delete(protocol.MemoryWriteRequest{Scope: "global", Key: "remove-shared-test", ID: target}); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	db = openTestStore(t, path)
+	for _, use := range uses {
+		_, err := db.Feedback(use)
+		requireCode(t, err, "RESOURCE_DELETED")
+	}
+	for _, table := range []string{"EdgeAdjustment", "FeedbackEvent"} {
+		rows, err := db.query("MATCH (n:"+table+" {relationship_id:$id}) RETURN n.id;", map[string]any{"id": edge})
+		if err != nil || len(rows) != 0 {
+			t.Fatalf("deleted relationship still has %s rows: %v, %v", table, rows, err)
+		}
+	}
+}
+
 func TestMemoryLifecycleSurvivesRestartAndImport(t *testing.T) {
 	dir := t.TempDir()
 	model := filepath.Join(dir, "model.txt")
@@ -150,6 +184,10 @@ func TestMemoryLifecycleSurvivesRestartAndImport(t *testing.T) {
 			if row[1] != nil || row[2] != nil || row[3] != nil || len(row[4].(string)) != 64 {
 				t.Fatalf("tombstone retained resource data: %v", row)
 			}
+			// Previously issued tombstones must remain replayable after an upgrade.
+			if row[0] == eRequest.Key && row[4] != "9856257c38fa62e90ecf410c8bc2d732d777ae2a6190db6ad1f6c926fe99d9e7" {
+				t.Fatalf("changed the persisted receipt fingerprint for %q: %v", eRequest.Key, row[4])
+			}
 		}
 	}
 	checkDeletion()
@@ -183,6 +221,13 @@ func TestMemoryLifecycleSurvivesRestartAndImport(t *testing.T) {
 		"ALTER TABLE Memory DROP proposal_producer;",
 		"ALTER TABLE Memory DROP proposal_applies_when;",
 		"ALTER TABLE Memory DROP proposal_rationale;",
+		"DROP TABLE EdgeAdjustment;",
+		"DROP TABLE FeedbackEvent;",
+		"ALTER TABLE Memory DROP review_outcome;",
+		"ALTER TABLE Memory DROP review_superseding_side;",
+		"ALTER TABLE Memory DROP review_applies_when;",
+		"ALTER TABLE Memory DROP review_rationale;",
+		"ALTER TABLE Memory DROP review_author;",
 		"MATCH (s:BigBrainSchema {name:'foundation'}) SET s.version='4';",
 		"CREATE (:Memory {id:'old-import',scope:'project:A',text:'Older write',source:'Old session',recorded_at:'then',memory_type:'decision'});",
 	} {
