@@ -16,9 +16,11 @@ import (
 
 // Store owns one native connection. The daemon serializes access to it.
 type Store struct {
-	database   *lbug.Database
-	connection *lbug.Connection
-	indexes    map[string]*scopeIndex
+	database       *lbug.Database
+	connection     *lbug.Connection
+	indexes        map[string]*scopeIndex
+	model          *embeddings
+	vectorFallback string
 
 	// The process-level acceptance tests use these transaction boundaries.
 	BeforeCommit func()

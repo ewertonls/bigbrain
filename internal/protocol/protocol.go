@@ -97,8 +97,9 @@ type WriteResult struct {
 }
 
 type QueryResult struct {
-	Matches []Match `json:"matches"`
-	Count   int     `json:"count"`
+	Fallback string  `json:"fallback,omitempty"`
+	Matches  []Match `json:"matches"`
+	Count    int     `json:"count"`
 }
 
 type Memory struct {
@@ -116,11 +117,13 @@ type Match struct {
 }
 
 type Reason struct {
-	BM25   float64  `json:"bm25,omitempty"`
-	Cosine float64  `json:"cosine,omitempty"`
-	Kind   string   `json:"kind"`
-	Terms  []string `json:"terms,omitempty"`
-	Path   *Path    `json:"path,omitempty"`
+	Score      float64  `json:"score,omitempty"`
+	GraphScore float64  `json:"graph_score,omitempty"`
+	BM25       float64  `json:"bm25,omitempty"`
+	Cosine     float64  `json:"cosine,omitempty"`
+	Kind       string   `json:"kind"`
+	Terms      []string `json:"terms,omitempty"`
+	Path       *Path    `json:"path,omitempty"`
 }
 
 type Path struct {
@@ -189,8 +192,8 @@ func (r QueryRequest) Validate() error {
 		r.Text != "" && !validText(r.Text, maxQueryTextBytes) {
 		return NewError("INVALID_REQUEST", "Query requires either valid search text or a memory ID.")
 	}
-	if r.Mode != "" && r.Mode != "text" && r.Mode != "associative" {
-		return NewError("INVALID_REQUEST", "Query mode must be text or associative.")
+	if r.Mode != "" && r.Mode != "text" && r.Mode != "associative" && r.Mode != "hybrid" {
+		return NewError("INVALID_REQUEST", "Query mode must be text, associative or hybrid.")
 	}
 	if r.Limit < 0 || r.Limit > MaxQueryLimit {
 		return NewError("INVALID_REQUEST", "Query limit must be between 1 and 100.")

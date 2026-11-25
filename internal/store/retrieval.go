@@ -14,34 +14,45 @@ func (s *Store) Query(request protocol.QueryRequest) (protocol.QueryResult, erro
 	if err := request.Validate(); err != nil {
 		return protocol.QueryResult{}, err
 	}
-	matches := make([]protocol.Match, 0)
 	if request.ID != "" {
 		memories, err := s.visibleMemories(request)
 		if err != nil {
 			return protocol.QueryResult{}, err
 		}
-		if len(memories) != 0 {
-			matches = append(matches, protocol.Match{Memory: memories[0], Reason: protocol.Reason{Kind: "id"}})
+		matches := make([]protocol.Match, 0, len(memories))
+		for _, m := range memories {
+			matches = append(matches, protocol.Match{Memory: m, Reason: protocol.Reason{Kind: "id"}})
 		}
-	} else {
-		indexes, err := s.visibleIndexes(request)
-		if err != nil {
-			return protocol.QueryResult{}, err
-		}
-		matches = indexes.textMatches(request.Text)
-		if request.Mode != "text" && len(matches) != 0 {
-			indirect, err := s.associations(request, matches, indexes)
-			if err != nil {
-				return protocol.QueryResult{}, err
-			}
-			matches = append(matches, indirect...)
-		}
+		return protocol.QueryResult{Matches: matches, Count: len(matches)}, nil
+	}
+	indexes, err := s.visibleIndexes(request)
+	if err != nil {
+		return protocol.QueryResult{}, err
 	}
 	limit := request.Limit
 	if limit == 0 {
 		limit = protocol.DefaultQueryLimit
 	}
-	return protocol.QueryResult{Matches: matches[:min(limit, len(matches))], Count: len(matches)}, nil
+	matches := indexes.textMatches(request.Text)
+	var fallback string
+	if request.Mode == "hybrid" {
+		var vector []float32
+		vector, fallback = s.queryVector(request.Text, indexes)
+		if fallback == "" {
+			matches, err = s.hybrid(request, indexes, matches, vector, limit)
+			if err != nil {
+				return protocol.QueryResult{}, err
+			}
+		}
+	}
+	if request.Mode == "" || request.Mode == "associative" || fallback != "" {
+		indirect, err := s.associations(request, matches, indexes)
+		if err != nil {
+			return protocol.QueryResult{}, err
+		}
+		matches = append(matches, indirect...)
+	}
+	return protocol.QueryResult{Matches: matches[:min(limit, len(matches))], Count: len(matches), Fallback: fallback}, nil
 }
 
 func (s *Store) visibleMemories(request protocol.QueryRequest) ([]protocol.Memory, error) {
