@@ -21,7 +21,7 @@ const overview = `Usage: bigbrain [flags] COMMAND
 
 Commands:
   record           Store a memory with its source.
-  link             Connect two memories in the same scope.
+  link             Connect memories within a scope or between a project and global.
   query            Search memories or look up an ID.
   db-path          Print the absolute path to the shared database file.
   project init ID  Save the project ID for this Git repository.

@@ -89,8 +89,7 @@ func TestScopedNeighborsRankAndDeduplicate(t *testing.T) {
 	_, err := database.Link(badLink)
 	requireCode(t, err, "NOT_FOUND")
 	badLink.ToID = global
-	_, err = database.Link(badLink)
-	requireCode(t, err, "NOT_FOUND")
+	linkForTest(t, database, badLink)
 
 	query := protocol.QueryRequest{Scope: "project:A", Text: "Orbit"}
 	matches := queryForTest(t, database, query)
@@ -214,5 +213,53 @@ func requireCode(t *testing.T, err error, code string) {
 	var operationError *protocol.Error
 	if !errors.As(err, &operationError) || operationError.Code != code {
 		t.Fatalf("error = %v, want code %s", err, code)
+	}
+}
+
+func TestProjectGlobalPathsRespectOwnerAndEndpoints(t *testing.T) {
+	db := openTestStore(t, filepath.Join(t.TempDir(), "memory.lbug"))
+	record := func(scope, text string) string {
+		return recordForTest(t, db, protocol.RecordRequest{Scope: scope, Key: text, Text: text, Source: text + " source"}).ID
+	}
+	a, b, g := record("project:A", "alpha"), record("project:B", "beta"), record("global", "shared")
+	link := func(scope, key, from, to string, weight float64) protocol.LinkRequest {
+		return protocol.LinkRequest{Scope: scope, Key: key, FromID: from, ToID: to, Kind: "cites", Source: key, Weight: weight}
+	}
+	l := linkForTest(t, db, link("project:A", "A review", g, a, 1))
+	linkForTest(t, db, link("project:B", "B review", b, g, 100))
+	for _, test := range []struct {
+		scope, text, neighbor, direction string
+		global                           bool
+	}{
+		{"global", "shared", "", "", false},
+		{"project:A", "alpha", "", "", false},
+		{"project:A", "shared", a, "forward", true},
+		{"project:A", "alpha", g, "reverse", true},
+		{"project:B", "shared", b, "reverse", true},
+	} {
+		r := queryForTest(t, db, protocol.QueryRequest{Scope: test.scope, Text: test.text, Mode: "associative", IncludeGlobal: test.global})
+		if test.neighbor == "" {
+			if r.Count != 1 {
+				t.Fatalf("private path exposed to %+v: %+v", test, r)
+			}
+			continue
+		}
+		if r.Count != 2 || r.Matches[1].ID != test.neighbor {
+			t.Fatalf("%+v: %+v", test, r)
+		}
+		p := r.Matches[1].Reason.Path
+		if p == nil || p.Scope != test.scope || p.Direction != test.direction {
+			t.Fatalf("bad path: %+v", p)
+		}
+		if test.scope == "project:A" && (p.RelationshipID != l.ID || p.FromID != g || p.ToID != a || p.Source != "A review" || p.Weight != 1) {
+			t.Fatalf("private link influenced ranking: %+v", p)
+		}
+	}
+	for _, request := range []protocol.LinkRequest{
+		link("project:A", "AB", a, b, 1), link("project:B", "BA", b, a, 1),
+		link("global", "GA", g, a, 1), link("project:A", "GG", g, g, 1),
+	} {
+		_, err := db.Link(request)
+		requireCode(t, err, "NOT_FOUND")
 	}
 }

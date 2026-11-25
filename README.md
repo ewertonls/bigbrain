@@ -98,7 +98,10 @@ worktrees share it. Every data command requires a scope. Use
 `--project ID` for a specific project or `--global` to select the global
 collection. To publish reviewed information, record a new global memory with
 the approved text, its own source, and a fresh key. A project query includes
-global memories when passed `--include-global`.
+global memories when passed `--include-global`. Use the project scope to
+link a project memory to a global memory in either direction. The project
+owns the relationship. Both endpoints and the relationship must be visible
+for a query to return its path, source or ranking contribution.
 
 Use `--mode text` for the text-only control and `--id ID` for an exact lookup
 within the selected scope. By default, search uses associative mode and returns

@@ -42,9 +42,11 @@ func verifyScopes(c cli, f fixture) {
 		"lost private or reviewed global provenance: %+v", withGlobal)
 	expectPath(got[f.evidence], f, "forward", "Test 7")
 	crossProject := expectError(c.run(linkArgs("link-b", f.decision, projectB)...), "NOT_FOUND")
-	crossGlobal := expectError(c.run(linkArgs("link-g", f.decision, global)...), "NOT_FOUND")
+	write(c, linkArgs("link-g", f.decision, global)...)
+	queryIDs(queryText(c, "shared", "associative", "3", "--project", "A", "--include-global"), global, f.decision)
+	queryIDs(queryText(c, "shared", "associative", "3", "--global"), global)
 	missing := expectError(c.run(linkArgs("link-missing", f.decision, "missing")...), "NOT_FOUND")
-	require(crossProject == missing && crossGlobal == missing, "link error reveals whether another scope contains the ID")
+	require(crossProject == missing, "link error reveals whether another scope contains the ID")
 
 	recordConflict := expectError(c.run(recordArgs("d1", decisionText, "Decision 12", "--project", "B")...), "IDEMPOTENCY_CONFLICT")
 	linkConflict := expectError(c.run(linkArgs("d1", f.decision, f.evidence)...), "IDEMPOTENCY_CONFLICT")
@@ -94,9 +96,9 @@ func snapshot(c cli) databaseSnapshot {
 	check(err)
 	defer conn.Close()
 	return databaseSnapshot{
-		Memories: rows(conn, "MATCH (m:Memory) RETURN m.id, m.scope, m.text, m.source, m.recorded_at ORDER BY m.id"),
+		Memories: rows(conn, "MATCH (m:Memory) RETURN m.id, m.scope, m.text, m.source, m.recorded_at, m.memory_type ORDER BY m.id"),
 		Relationships: rows(conn, `MATCH (a:Memory)-[e:Evidence]->(b:Memory)
-RETURN e.id, a.id, b.id, e.kind, e.weight, e.source ORDER BY e.id`),
+RETURN e.id, a.id, b.id, e.kind, e.weight, e.source, e.scope ORDER BY e.id`),
 		Receipts: rows(conn, "MATCH (r:Receipt) RETURN r.key, r.operation, r.scope, r.fingerprint, r.result_id ORDER BY r.key"),
 	}
 }
