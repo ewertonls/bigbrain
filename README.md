@@ -115,7 +115,9 @@ Foundation associative behavior.
 
 Configure the daemon with a local word2vec text vocabulary. The file begins
 with the word count and dimension, followed by one word and its vector per
-line. Plain text and gzip are supported. The evaluation used Stanford GloVe
+line. Plain text and gzip are supported. For each word used in an embedding,
+BigBrain tries the original spelling first, then its lowercase form.
+The evaluation used Stanford GloVe
 Wiki/Gigaword, 400,000 words and 50 dimensions. Download it once during
 setup. The daemon reads the local file when it first receives a hybrid query.
 

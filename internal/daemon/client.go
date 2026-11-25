@@ -208,7 +208,8 @@ func launch(ctx context.Context, t target, lock *os.File) error {
 	case err := <-ready:
 		return err
 	case <-ctx.Done():
-		_ = cmd.Process.Kill()
+		// The daemon owns the lock and may still be migrating the database.
+		// A later client can connect when initialization finishes.
 		return startupTimeout(t)
 	}
 }

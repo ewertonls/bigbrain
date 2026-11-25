@@ -30,6 +30,12 @@ var migrations = [][]string{
 		"ALTER TABLE Memory ADD invalid_at STRING;",
 		"ALTER TABLE Receipt ADD deleted BOOL DEFAULT false;",
 	},
+	{
+		// LadybugDB exports omit column defaults. Writes made after importing
+		// a v4 database could leave new memories and receipts without a status.
+		"MATCH (m:Memory) WHERE m.status IS NULL SET m.status = 'active';",
+		"MATCH (r:Receipt) WHERE r.deleted IS NULL SET r.deleted = false;",
+	},
 }
 
 func (s *Store) openSchema() error {
