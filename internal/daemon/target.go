@@ -62,8 +62,10 @@ func private(info os.FileInfo) bool {
 
 func (t target) lockPath() string     { return filepath.Join(t.dir, "daemon.lock") }
 func (t target) instancePath() string { return filepath.Join(t.dir, "daemon-instance.json") }
-func (t target) databasePath() string { return filepath.Join(t.dir, "memory.lbug") }
 func (t target) logPath() string      { return filepath.Join(t.dir, "daemon.log") }
+
+// DatabaseFile returns the LadybugDB file shared by all scopes in dir.
+func DatabaseFile(dir string) string { return filepath.Join(dir, "memory.lbug") }
 
 func openPrivateFile(path string, flags int) (*os.File, error) {
 	fd, err := syscall.Open(path, flags|syscall.O_NOFOLLOW|syscall.O_CLOEXEC|syscall.O_NONBLOCK, 0o600)

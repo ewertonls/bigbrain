@@ -53,6 +53,18 @@ owned by your account and private to it. `bigbrain status` checks the daemon
 and `bigbrain shutdown` waits for it to finish. Startup and runtime diagnostics
 are written to `daemon.log` in the database directory.
 
+Run `bigbrain db-path --current-project` to print the absolute path to
+`memory.lbug`. You can also select `--project ID` or `--global`. All scopes
+in the selected database directory share this file. The command works before
+the first write and while the daemon is stopped.
+
+```sh
+bigbrain db-path --project orbit
+bigbrain --db ./dev-data --json db-path --global
+```
+
+JSON output includes the resolved `scope`, `directory`, and `database_file`.
+
 ## Record and retrieve evidence
 
 ```sh

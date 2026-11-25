@@ -22,12 +22,13 @@ const usage = `Usage: bigbrain [--db DIR] [--json] COMMAND
   record --key KEY --text TEXT --source SOURCE
   link   --key KEY --from ID --to ID --type TYPE [--weight NUMBER] --source SOURCE
   query  (--text TEXT | --id ID) [--mode text|associative] [--limit N] [--include-global]
+  db-path    Print the absolute path to the shared database file.
   project init ID
   status
   shutdown
   help
 
-Select exactly one scope on record, link, and query.
+Select exactly one scope on record, link, query, and db-path.
   --project ID       Select a project by ID.
   --current-project  Use the project ID saved by project init in Git.
   --global           Select the global collection.
@@ -46,6 +47,12 @@ type scopeOptions struct {
 
 type projectResult struct {
 	ID string `json:"id"`
+}
+
+type databaseLocation struct {
+	Scope        string `json:"scope"`
+	Directory    string `json:"directory"`
+	DatabaseFile string `json:"database_file"`
 }
 
 func main() {
@@ -94,6 +101,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		_, err = fmt.Fprintln(stdout, value.ID)
 	case protocol.StatusResult:
 		_, err = fmt.Fprintln(stdout, value.State)
+	case databaseLocation:
+		_, err = fmt.Fprintln(stdout, value.DatabaseFile)
 	default:
 		encoder := json.NewEncoder(stdout)
 		encoder.SetIndent("", "  ")
@@ -137,6 +146,15 @@ func execute(args []string, options *options) (any, error) {
 	flags.BoolVar(&scope.global, "global", false, "global scope")
 
 	switch command {
+	case "db-path":
+		if err := options.parseFlags(flags, args); err != nil {
+			return parseError(err)
+		}
+		selected, err := scope.resolve(flags)
+		if err != nil {
+			return nil, err
+		}
+		return locateDatabase(selected, options.db)
 	case "record":
 		var request protocol.RecordRequest
 		flags.StringVar(&request.Key, "key", "", "idempotency key")
@@ -230,6 +248,25 @@ func databasePath(override string) (string, error) {
 		base = filepath.Join(home, ".local", "share")
 	}
 	return filepath.Join(base, "bigbrain"), nil
+}
+
+func locateDatabase(scope, override string) (databaseLocation, error) {
+	dir, err := databasePath(override)
+	if err != nil {
+		return databaseLocation{}, err
+	}
+	// Match the daemon's physical directory when it already exists. A fresh
+	// checkout can also inspect its configured path before the first write.
+	if physical, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = physical
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return databaseLocation{}, protocol.NewError("DATABASE_UNAVAILABLE", err.Error())
+	}
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		return databaseLocation{}, protocol.NewError("DATABASE_UNAVAILABLE", err.Error())
+	}
+	return databaseLocation{Scope: scope, Directory: dir, DatabaseFile: daemon.DatabaseFile(dir)}, nil
 }
 
 func newFlags(command string) *flag.FlagSet {
