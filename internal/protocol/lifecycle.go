@@ -29,6 +29,7 @@ type Invalidation struct {
 type HistoryResult struct {
 	Memory       Memory          `json:"memory"`
 	Status       string          `json:"status"`
+	Proposal     *Proposal       `json:"proposal,omitempty"`
 	Invalidation *Invalidation   `json:"invalidation,omitempty"`
 	Related      []RelatedMemory `json:"related"`
 	NextCursor   string          `json:"next_cursor,omitempty"`

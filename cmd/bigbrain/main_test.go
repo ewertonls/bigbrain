@@ -93,6 +93,21 @@ func TestLinkConfidenceFlag(t *testing.T) {
 	}
 }
 
+func TestConsolidateFlags(t *testing.T) {
+	var r protocol.ConsolidateRequest
+	flags := newFlags("consolidate")
+	consolidateFlags(flags, &r)
+	if err := flags.Parse([]string{"--key", "lesson", "--evidence", "a", "--evidence", "b",
+		"--text", "retry", "--applies-when", "quota resets", "--rationale", "two trials", "--producer", "agent", "--source", "review"}); err != nil {
+		t.Fatal(err)
+	}
+	want := protocol.ConsolidateRequest{Key: "lesson", EvidenceIDs: []string{"a", "b"},
+		ExternalProposal: &protocol.ExternalProposal{Text: "retry", AppliesWhen: "quota resets", Rationale: "two trials", Producer: "agent", Source: "review"}}
+	if !reflect.DeepEqual(r, want) {
+		t.Fatalf("parsed request = %+v, want %+v", r, want)
+	}
+}
+
 func TestJSONOutputWithHelpAndInvalidFlags(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -102,6 +117,8 @@ func TestJSONOutputWithHelpAndInvalidFlags(t *testing.T) {
 	}{
 		{"help command", []string{"help", "--json"}, true, ""},
 		{"help flag", []string{"status", "--help", "--json"}, true, ""},
+		{"consolidation is project-local", []string{"consolidate", "--global", "--key", "draft", "--evidence", "a", "--json"}, true, "INVALID_SCOPE"},
+		{"empty external draft", []string{"consolidate", "--db", "/dev/null", "--project", "A", "--key", "draft", "--evidence", "a", "--text", "", "--json"}, true, "INVALID_REQUEST"},
 		{"JSON after invalid value", []string{"query", "--limit", "many", "--json=T"}, true, "INVALID_REQUEST"},
 		{"graph depth on lookup", []string{"query", "--global", "--id", "a", "--max-depth", "1", "--json"}, true, "INVALID_REQUEST"},
 		{"graph neighbors on text mode", []string{"query", "--global", "--text", "a", "--mode", "text", "--max-neighbors", "1", "--json"}, true, "INVALID_REQUEST"},

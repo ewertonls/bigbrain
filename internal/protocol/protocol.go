@@ -158,9 +158,13 @@ var projectID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 func ValidProjectID(id string) bool { return projectID.MatchString(id) }
 
-func validateScope(scope string) error {
+func isProjectScope(scope string) bool {
 	id, project := strings.CutPrefix(scope, "project:")
-	if scope == "global" || project && ValidProjectID(id) {
+	return project && ValidProjectID(id)
+}
+
+func validateScope(scope string) error {
+	if scope == "global" || isProjectScope(scope) {
 		return nil
 	}
 	return NewError("INVALID_SCOPE", "Choose an explicit project or global scope.")

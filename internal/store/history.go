@@ -17,7 +17,8 @@ func (s *Store) History(r protocol.HistoryRequest) (protocol.HistoryResult, erro
 	params := scopeParameters(r.Scope, r.IncludeGlobal)
 	params["id"] = r.ID
 	rows, err := s.query("MATCH (m:Memory {id:$id}) WHERE "+visibleMemory+" RETURN "+memoryColumns+
-		", m.status, m.invalid_reason, m.invalid_source, m.invalid_at;", params)
+		`, m.status, [m.invalid_reason, m.invalid_source, m.invalid_at],
+		[m.proposal_origin, m.proposal_producer, m.proposal_applies_when, m.proposal_rationale];`, params)
 	if err != nil {
 		return history, err
 	}
@@ -29,17 +30,22 @@ func (s *Store) History(r protocol.HistoryRequest) (protocol.HistoryResult, erro
 	if err != nil {
 		return history, err
 	}
+	if history.Memory.Type == "lesson_proposal" {
+		var proposal protocol.Proposal
+		if !readHistoryFields(row[8], &proposal.Origin, &proposal.Producer, &proposal.AppliesWhen, &proposal.Rationale) {
+			return history, errors.New("invalid lesson proposal metadata")
+		}
+		history.Proposal = &proposal
+	}
 	history.Status, _ = row[6].(string)
 	switch history.Status {
 	case "active":
 	case "invalidated":
-		reason, okReason := row[7].(string)
-		source, okSource := row[8].(string)
-		at, okAt := row[9].(string)
-		if !okReason || !okSource || !okAt {
+		var invalidation protocol.Invalidation
+		if !readHistoryFields(row[7], &invalidation.Reason, &invalidation.Source, &invalidation.At) {
 			return history, errors.New("invalid memory history")
 		}
-		history.Invalidation = &protocol.Invalidation{Reason: reason, Source: source, At: at}
+		history.Invalidation = &invalidation
 	default:
 		return history, errors.New("invalid memory status")
 	}
@@ -58,6 +64,22 @@ func (s *Store) History(r protocol.HistoryRequest) (protocol.HistoryResult, erro
 		history.NextCursor = history.Related[r.Limit-1].Path.RelationshipID
 	}
 	return history, nil
+}
+
+// A history metadata group is required only for the matching memory type or status.
+func readHistoryFields(group any, fields ...*string) bool {
+	values, ok := group.([]any)
+	if !ok || len(values) != len(fields) {
+		return false
+	}
+	for i, field := range fields {
+		value, ok := values[i].(string)
+		if !ok {
+			return false
+		}
+		*field = value
+	}
+	return true
 }
 
 func (s *Store) visibleEdges(r protocol.HistoryRequest, activeOnly bool) ([]protocol.RelatedMemory, error) {

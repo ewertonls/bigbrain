@@ -179,6 +179,10 @@ func TestMemoryLifecycleSurvivesRestartAndImport(t *testing.T) {
 		"ALTER TABLE Evidence DROP activation_count;",
 		"ALTER TABLE Evidence DROP last_activated_at;",
 		"ALTER TABLE Evidence DROP created_at;",
+		"ALTER TABLE Memory DROP proposal_origin;",
+		"ALTER TABLE Memory DROP proposal_producer;",
+		"ALTER TABLE Memory DROP proposal_applies_when;",
+		"ALTER TABLE Memory DROP proposal_rationale;",
 		"MATCH (s:BigBrainSchema {name:'foundation'}) SET s.version='4';",
 		"CREATE (:Memory {id:'old-import',scope:'project:A',text:'Older write',source:'Old session',recorded_at:'then',memory_type:'decision'});",
 	} {

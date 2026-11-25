@@ -22,6 +22,7 @@ const overview = `Usage: bigbrain [flags] COMMAND
 Commands:
   record           Store a memory with its source.
   link             Connect memories within a scope or between a project and global.
+  consolidate      Propose a local lesson from project evidence.
   query            Search memories or look up an ID.
   invalidate       Hide a memory and preserve its history.
   history          Inspect a memory and its visible relationships.
@@ -173,7 +174,11 @@ func execute(args []string, options *options) (any, error) {
 	scope := scopeOptions{}
 	flags.StringVar(&scope.project, "project", "", "select project `ID`")
 	flags.BoolVar(&scope.current, "current-project", false, "use the project configured for this Git worktree")
-	flags.BoolVar(&scope.global, "global", false, "select the global collection")
+	globalUsage := "select the global collection"
+	if command == "consolidate" {
+		globalUsage = "unavailable for this project operation"
+	}
+	flags.BoolVar(&scope.global, "global", false, globalUsage)
 
 	switch command {
 	case "db-path":
@@ -195,6 +200,10 @@ func execute(args []string, options *options) (any, error) {
 	case "link":
 		var request protocol.LinkRequest
 		linkFlags(flags, &request)
+		return dataCommand[protocol.WriteResult](flags, args, &scope, options, &request.Scope, &request)
+	case "consolidate":
+		var request protocol.ConsolidateRequest
+		consolidateFlags(flags, &request)
 		return dataCommand[protocol.WriteResult](flags, args, &scope, options, &request.Scope, &request)
 	case "invalidate":
 		var request protocol.InvalidateRequest
@@ -265,6 +274,27 @@ func linkFlags(flags *flag.FlagSet, request *protocol.LinkRequest) {
 func memoryWriteFlags(flags *flag.FlagSet, request *protocol.MemoryWriteRequest) {
 	flags.StringVar(&request.Key, "key", "", "idempotency key (required)")
 	flags.StringVar(&request.ID, "id", "", "memory ID (required)")
+}
+
+func consolidateFlags(flags *flag.FlagSet, request *protocol.ConsolidateRequest) {
+	flags.StringVar(&request.Key, "key", "", "idempotency key (required)")
+	flags.Func("evidence", "project memory `ID` (required; repeat for each source)", func(id string) error {
+		request.EvidenceIDs = append(request.EvidenceIDs, id)
+		return nil
+	})
+	var draft protocol.ExternalProposal
+	draftFlag := func(field *string, name, usage string) {
+		flags.Func(name, usage, func(value string) error {
+			*field = value
+			request.ExternalProposal = &draft
+			return nil
+		})
+	}
+	draftFlag(&draft.Text, "text", "externally proposed lesson")
+	draftFlag(&draft.AppliesWhen, "applies-when", "when the external lesson applies")
+	draftFlag(&draft.Rationale, "rationale", "why the evidence supports the external lesson")
+	draftFlag(&draft.Producer, "producer", "person or agent that produced the external lesson")
+	draftFlag(&draft.Source, "source", "external proposal source (defaults to producer)")
 }
 
 func dataCommand[R any](flags *flag.FlagSet, args []string, selection *scopeOptions,
@@ -400,7 +430,10 @@ func helpText(flags *flag.FlagSet) string {
 	default:
 		fmt.Fprintf(&out, "Usage: bigbrain %s [flags]\n", flags.Name())
 	}
-	if flags.Lookup("project") != nil {
+	if flags.Name() == "consolidate" {
+		out.WriteString("\nChoose -project ID or -current-project.\n")
+		out.WriteString("For an external proposal, supply -text, -applies-when, -rationale, and -producer together.\n")
+	} else if flags.Lookup("project") != nil {
 		out.WriteString("\nChoose exactly one scope: -project ID, -current-project, or -global.\n")
 	}
 	out.WriteString("\nFlags:\n")

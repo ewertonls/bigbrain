@@ -182,6 +182,7 @@ func (s *serverState) routes() http.Handler {
 		respond(w, status, nil)
 	})
 	mux.HandleFunc("POST /v1/record", operation(s, s.database.Record))
+	mux.HandleFunc("POST /v1/consolidate", operation(s, s.database.Consolidate))
 	mux.HandleFunc("POST /v1/link", operation(s, s.database.Link))
 	mux.HandleFunc("POST /v1/invalidate", operation(s, s.database.Invalidate))
 	mux.HandleFunc("POST /v1/delete", operation(s, s.database.Delete))

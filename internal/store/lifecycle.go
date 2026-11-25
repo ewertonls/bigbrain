@@ -61,7 +61,7 @@ func (s *Store) Delete(r protocol.MemoryWriteRequest) (protocol.WriteResult, err
 		// A global deletion also removes incident project-owned edges. Their
 		// receipts are updated here without returning their IDs or sources.
 		rows, err := s.query(`
-MATCH (r:Receipt) WHERE r.operation='record' AND r.result_id=$id
+MATCH (r:Receipt) WHERE r.operation IN ['record', 'consolidate'] AND r.result_id=$id
 RETURN r.key, r.operation, r.scope, r.fingerprint
 UNION
 MATCH (:Memory {id:$id})-[e:Evidence]-(:Memory), (r:Receipt)

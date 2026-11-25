@@ -20,13 +20,7 @@ func (s scopeOptions) resolve(flags *flag.FlagSet) (string, error) {
 	flags.Visit(func(f *flag.Flag) {
 		explicit = explicit || f.Name == "project"
 	})
-	if explicit && (s.current || s.global) || s.current && s.global {
-		return "", protocol.NewError("INVALID_SCOPE", "Choose exactly one of --project, --current-project, or --global.")
-	}
-	if s.global {
-		return "global", nil
-	}
-	if s.current {
+	if s.current && !explicit && !s.global {
 		path, err := projectFile()
 		if err != nil {
 			return "", err
@@ -37,10 +31,16 @@ func (s scopeOptions) resolve(flags *flag.FlagSet) (string, error) {
 		}
 		return "project:" + id, nil
 	}
-	if explicit && protocol.ValidProjectID(s.project) {
+	if explicit && !s.current && !s.global && protocol.ValidProjectID(s.project) {
 		return "project:" + s.project, nil
 	}
-	return "", protocol.NewError("INVALID_SCOPE", "Choose --global, --current-project, or --project with a valid project ID.")
+	if flags.Name() == "consolidate" {
+		return "", protocol.NewError("INVALID_SCOPE", "Choose --project ID or --current-project for "+flags.Name()+".")
+	}
+	if s.global && !explicit && !s.current {
+		return "global", nil
+	}
+	return "", protocol.NewError("INVALID_SCOPE", "Choose exactly one of --global, --current-project, or --project with a valid project ID.")
 }
 
 func initProject(id string) (any, error) {

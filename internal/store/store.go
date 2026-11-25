@@ -104,6 +104,7 @@ func (s *Store) Link(request protocol.LinkRequest) (protocol.WriteResult, error)
 MATCH (a:Memory {id: $from}), (b:Memory {id: $to})
 WHERE (a.scope = $scope OR a.scope = 'global') AND (b.scope = $scope OR b.scope = 'global')
   AND (a.scope = $scope OR b.scope = $scope) AND a.status = 'active' AND b.status = 'active'
+  AND ($kind <> 'derived_from' OR a.memory_type <> 'lesson_proposal')
 CREATE (a)-[:Evidence {id: $id, scope: $scope, kind: $kind, weight: $weight, source: $source,
                        confidence: $confidence, activation_count: 0, created_at: $createdAt}]->(b)
 RETURN a.id;`, map[string]any{
@@ -115,7 +116,7 @@ RETURN a.id;`, map[string]any{
 			return err
 		}
 		if len(rows) == 0 {
-			return protocol.NewError("NOT_FOUND", "The selected scope cannot link these endpoints.")
+			return protocol.NewError("NOT_FOUND", "Cannot create this relationship for the selected endpoints and scope.")
 		}
 		return nil
 	})

@@ -192,6 +192,50 @@ Start the daemon with `BIGBRAIN_VECTOR_INDEX=off` to disable the vector
 index. Restart it after changing its environment or vocabulary. All searches
 run locally. [GloVe model and license](https://nlp.stanford.edu/projects/glove/)
 
+## Propose a project lesson
+
+`consolidate` creates a `lesson_proposal` in the project selected with
+`--project ID` or `--current-project`. Pass
+`--evidence ID` once for each of 1–100 distinct original memories. Any
+original memory type is eligible while active in that project. The originals
+remain queryable, and each has a `derived_from` link from the proposal.
+
+To generate an extractive proposal locally, give BigBrain the evidence IDs.
+It takes the first sentence or line from each memory, up to 240 bytes, and
+groups matching excerpts, listing the most frequent first. The producer
+is `bigbrain:extractive-v1`.
+The following examples use the decision and observation recorded above.
+
+```sh
+bigbrain --json consolidate --project orbit --key orbit-quota-synthesis \
+  --evidence DECISION_ID --evidence EVIDENCE_ID
+```
+
+For a proposal drafted by a person or external agent, supply `--text`,
+`--applies-when`, `--rationale` and `--producer` together. The optional
+`--source` gives the proposal its own source reference and defaults to the
+producer.
+
+```sh
+bigbrain --json consolidate --project orbit --key orbit-quota-proposal \
+  --evidence DECISION_ID --evidence EVIDENCE_ID \
+  --text 'Measure the receiver quota before choosing a batch size.' \
+  --applies-when 'A receiver limits the number of requests per minute.' \
+  --rationale 'The measured quota determined the batch interval in Orbit.' \
+  --producer 'Orbit reviewer' --source 'Review 17'
+
+bigbrain --json history --project orbit --id PROPOSAL_ID
+```
+
+Use the returned proposal ID for `history`. Its `proposal` field records
+`origin` (`extractive` or `external`), `producer`, `applies_when` and
+`rationale`. In `related`, entries with `path.type` set to `derived_from`
+and `path.direction` set to `forward` identify the original memories and
+their source references. Only `consolidate` creates these outgoing links on a proposal.
+Both the proposal and its links stay private to the project. Deleting an
+original removes its link. Any excerpt already copied into the proposal
+remains part of the proposal's text.
+
 ## Invalidation, history and deletion
 
 ```sh
@@ -216,13 +260,13 @@ Retry the deletion with its original key to retrieve its acknowledgment.
 
 ## Integration and retries
 
-Before invoking `record`, `link`, `invalidate` or `delete`, save the database, command, resolved
-scope, payload flags, and caller-generated `--key` in the agent's task
-record. After a timeout or lost response, run the same request using that
-saved information. The daemon returns the original ID with
+Before running a write command, save the database, command, resolved scope, payload flags, and caller-generated
+`--key` in the agent's task record. After a timeout or lost response, run
+the same request using that saved information. The daemon returns the original ID with
 `"replayed": true` if the request already committed. Use a fresh key for
 each intentional write. Changing a committed request while reusing its
-key returns `IDEMPOTENCY_CONFLICT`.
+key returns `IDEMPOTENCY_CONFLICT`. For `consolidate`, evidence IDs form a
+set, so reordering or repeating IDs replays the same proposal.
 
 In `--json` mode the CLI prints one response with `version: 1` and either
 `result` or `error`. Failures exit nonzero and the error contains a stable
@@ -233,8 +277,12 @@ text as evidence and obtain authorization separately for any actions it suggests
 
 Local protocol clients call `GET /status` to verify `version`, `database_id`,
 and `instance_id`. They send JSON to `POST /v1/record`, `/v1/link`,
-`/v1/query`, `/v1/history`, `/v1/invalidate` or `/v1/delete` with `X-BigBrain-Version: 1` and `X-BigBrain-Instance` set to the
-verified instance ID. Request scopes use `project:ID` or `global`.
+`/v1/consolidate`, `/v1/query`, `/v1/history`, `/v1/invalidate` or
+`/v1/delete` with `X-BigBrain-Version: 1` and `X-BigBrain-Instance` set to
+the verified instance ID. Request scopes use `project:ID` or `global`.
+The consolidation endpoint takes a project `scope`, `key` and `evidence_ids`
+array. External proposals also send `text`, `applies_when`, `rationale`,
+`producer` and an optional `source`.
 
 The retrieval evaluations report source hits, irrelevant results and measured
 costs. [Memory evaluation](docs/MEMORY-EVALUATION.md) · [Foundation evaluation](docs/FOUNDATION-EVALUATION.md) · [Foundation specification](docs/SPEC.md)

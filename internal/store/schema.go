@@ -43,6 +43,12 @@ var migrations = [][]string{
 		"ALTER TABLE Evidence ADD last_activated_at STRING;",
 		"ALTER TABLE Evidence ADD created_at STRING;",
 	},
+	{
+		"ALTER TABLE Memory ADD proposal_origin STRING;",
+		"ALTER TABLE Memory ADD proposal_producer STRING;",
+		"ALTER TABLE Memory ADD proposal_applies_when STRING;",
+		"ALTER TABLE Memory ADD proposal_rationale STRING;",
+	},
 }
 
 func (s *Store) openSchema() error {
@@ -92,6 +98,7 @@ func (s *Store) openSchema() error {
 func (s *Store) checkSchema() error {
 	for _, statement := range []string{
 		"MATCH (m:Memory) RETURN m.id, m.scope, m.text, m.source, m.recorded_at, m.memory_type, m.status, m.invalid_reason, m.invalid_source, m.invalid_at LIMIT 0;",
+		"MATCH (m:Memory) RETURN m.proposal_origin, m.proposal_producer, m.proposal_applies_when, m.proposal_rationale LIMIT 0;",
 		"MATCH (r:Receipt) RETURN r.key, r.operation, r.scope, r.fingerprint, r.result_id, r.deleted LIMIT 0;",
 		"MATCH (:Memory)-[r:Evidence]->(:Memory) RETURN r.id, r.kind, r.weight, r.source, r.scope, r.confidence, r.activation_count, r.last_activated_at, r.created_at LIMIT 0;",
 	} {
