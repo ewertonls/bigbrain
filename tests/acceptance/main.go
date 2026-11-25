@@ -355,6 +355,8 @@ func main() {
 	faultBinary := os.Args[2]
 	verifyCrash(production("crash-before"), faultBinary, "before")
 	verifyCrash(production("crash-after"), faultBinary, "after")
+	verifyDeleteCrash(production("delete-before"), faultBinary, "before")
+	verifyDeleteCrash(production("delete-after"), faultBinary, "after")
 	verifyDrain(production("drain"), faultBinary)
 	fmt.Fprintln(os.Stderr, "Passed interrupted commits and graceful shutdown")
 
@@ -365,7 +367,7 @@ func main() {
 	}{
 		[]string{"cross_session_retrieval", "association_control", "scope_isolation", "git_worktrees", "read_only_query",
 			"simultaneous_startup", "protocol_version", "database_preservation",
-			"crash_before_commit", "crash_after_commit", "graceful_shutdown", "repeated_shutdown"},
+			"crash_before_commit", "crash_after_commit", "delete_before_commit", "delete_after_commit", "graceful_shutdown", "repeated_shutdown"},
 		scores, reopenMS,
 	}))
 }

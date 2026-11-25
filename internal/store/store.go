@@ -71,7 +71,7 @@ func (s *Store) Record(request protocol.RecordRequest) (protocol.WriteResult, er
 	if err := request.Validate(); err != nil {
 		return protocol.WriteResult{}, err
 	}
-	result, err := s.write("record", request.Scope, request.Key, request, func(id string) error {
+	return s.write("record", request.Scope, request.Key, "", request, func(id string) error {
 		memoryType := request.Type
 		if memoryType == "" {
 			memoryType = "unknown"
@@ -82,11 +82,6 @@ func (s *Store) Record(request protocol.RecordRequest) (protocol.WriteResult, er
 		})
 		return err
 	})
-	// Publish the invalidation only after the database transaction commits.
-	if err == nil && !result.Replayed {
-		delete(s.indexes, request.Scope)
-	}
-	return result, err
 }
 
 func (s *Store) Link(request protocol.LinkRequest) (protocol.WriteResult, error) {
@@ -97,11 +92,11 @@ func (s *Store) Link(request protocol.LinkRequest) (protocol.WriteResult, error)
 	if request.Weight == 0 {
 		request.Weight = 0
 	}
-	return s.write("link", request.Scope, request.Key, request, func(id string) error {
+	return s.write("link", request.Scope, request.Key, "", request, func(id string) error {
 		rows, err := s.query(`
 MATCH (a:Memory {id: $from}), (b:Memory {id: $to})
 WHERE (a.scope = $scope OR a.scope = 'global') AND (b.scope = $scope OR b.scope = 'global')
-  AND (a.scope = $scope OR b.scope = $scope)
+  AND (a.scope = $scope OR b.scope = $scope) AND a.status = 'active' AND b.status = 'active'
 CREATE (a)-[:Evidence {id: $id, scope: $scope, kind: $kind, weight: $weight, source: $source}]->(b)
 RETURN a.id;`, map[string]any{
 			"from": request.FromID, "to": request.ToID, "scope": request.Scope, "id": id,
@@ -117,7 +112,7 @@ RETURN a.id;`, map[string]any{
 	})
 }
 
-func (s *Store) write(operation, scope, key string, request any, mutate func(id string) error) (protocol.WriteResult, error) {
+func (s *Store) write(operation, scope, key, targetID string, request any, mutate func(id string) error) (protocol.WriteResult, error) {
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return protocol.WriteResult{}, err
@@ -132,13 +127,16 @@ func (s *Store) write(operation, scope, key string, request any, mutate func(id 
 	committed := false
 	defer s.rollbackUnlessCommitted(&committed)
 
-	rows, err := s.query("MATCH (r:Receipt {key: $key}) RETURN r.operation, r.scope, r.fingerprint, r.result_id;", map[string]any{"key": key})
+	rows, err := s.query("MATCH (r:Receipt {key: $key}) RETURN r.operation, r.scope, r.fingerprint, r.result_id, r.deleted;", map[string]any{"key": key})
 	if err != nil {
 		return result, err
 	}
 	if len(rows) == 1 {
 		row := rows[0]
-		if row[0] != operation || row[1] != scope || row[2] != fingerprint {
+		if row[4] == true && row[2] == removedFingerprint(operation, scope, fingerprint) {
+			return result, protocol.NewError("RESOURCE_DELETED", "The resource created by this request has been deleted.")
+		}
+		if row[4] == true || row[0] != operation || row[1] != scope || row[2] != fingerprint {
 			return result, protocol.NewError("IDEMPOTENCY_CONFLICT", "This idempotency key is already in use.")
 		}
 		id, ok := row[3].(string)
@@ -147,7 +145,10 @@ func (s *Store) write(operation, scope, key string, request any, mutate func(id 
 		}
 		return protocol.WriteResult{ID: id, Replayed: true}, nil
 	}
-	result.ID = rand.Text()
+	result.ID = targetID
+	if result.ID == "" {
+		result.ID = rand.Text()
+	}
 	if err := mutate(result.ID); err != nil {
 		return protocol.WriteResult{}, err
 	}
@@ -164,6 +165,9 @@ CREATE (:Receipt {key: $key, operation: $operation, scope: $scope, fingerprint: 
 		return protocol.WriteResult{}, err
 	}
 	committed = true
+	if operation != "link" {
+		delete(s.indexes, scope)
+	}
 	if s.AfterCommit != nil {
 		s.AfterCommit()
 	}

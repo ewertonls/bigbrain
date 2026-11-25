@@ -56,39 +56,48 @@ func (s *Store) Query(request protocol.QueryRequest) (protocol.QueryResult, erro
 }
 
 func (s *Store) visibleMemories(request protocol.QueryRequest) ([]protocol.Memory, error) {
-	parameters := scopeParameters(request)
-	statement := "MATCH (m:Memory) WHERE (m.scope = $scope OR m.scope = $extraScope)"
+	parameters := scopeParameters(request.Scope, request.IncludeGlobal)
+	statement := "MATCH (m:Memory) WHERE " + visibleMemory + " AND m.status = 'active'"
 	if request.ID != "" {
 		statement += " AND m.id = $id"
 		parameters["id"] = request.ID
 	}
-	rows, err := s.query(statement+" RETURN m.id, m.scope, m.text, m.source, m.recorded_at, m.memory_type;", parameters)
+	rows, err := s.query(statement+" RETURN "+memoryColumns, parameters)
 	if err != nil {
 		return nil, err
 	}
 	memories := make([]protocol.Memory, 0, len(rows))
 	for _, row := range rows {
-		var fields [6]string
-		for index, value := range row {
-			text, ok := value.(string)
-			if !ok {
-				return nil, errors.New("Invalid memory in the database.")
-			}
-			fields[index] = text
+		m, err := decodeMemory(row)
+		if err != nil {
+			return nil, err
 		}
-		memories = append(memories, protocol.Memory{
-			ID: fields[0], Scope: fields[1], Text: fields[2], Source: fields[3], RecordedAt: fields[4], Type: fields[5],
-		})
+		memories = append(memories, m)
 	}
 	return memories, nil
 }
 
-func scopeParameters(request protocol.QueryRequest) map[string]any {
-	extraScope := request.Scope
-	if request.IncludeGlobal {
+const visibleMemory = "(m.scope = $scope OR m.scope = $extraScope)"
+const memoryColumns = "m.id, m.scope, m.text, m.source, m.recorded_at, m.memory_type"
+
+func decodeMemory(row []any) (protocol.Memory, error) {
+	var fields [6]string
+	for i := range fields {
+		v, ok := row[i].(string)
+		if !ok {
+			return protocol.Memory{}, errors.New("Invalid memory in the database.")
+		}
+		fields[i] = v
+	}
+	return protocol.Memory{ID: fields[0], Scope: fields[1], Text: fields[2], Source: fields[3], RecordedAt: fields[4], Type: fields[5]}, nil
+}
+
+func scopeParameters(scope string, includeGlobal bool) map[string]any {
+	extraScope := scope
+	if includeGlobal {
 		extraScope = "global"
 	}
-	return map[string]any{"scope": request.Scope, "extraScope": extraScope}
+	return map[string]any{"scope": scope, "extraScope": extraScope}
 }
 
 func (s *Store) associations(request protocol.QueryRequest, seeds []protocol.Match, indexes collection) ([]protocol.Match, error) {
@@ -113,50 +122,16 @@ func (s *Store) associations(request protocol.QueryRequest, seeds []protocol.Mat
 
 func (s *Store) neighbors(request protocol.QueryRequest, seed protocol.Memory, indexes collection) ([]protocol.Match, error) {
 	bestByID := make(map[string]protocol.Match)
-	parameters := scopeParameters(request)
-	parameters["id"] = seed.ID
-	for _, traversal := range []struct {
-		relation  string
-		direction string
-	}{
-		{"-[edge:Evidence]->", "forward"},
-		{"<-[edge:Evidence]-", "reverse"},
-	} {
-		rows, err := s.query(`
-MATCH (seed:Memory {id: $id})`+traversal.relation+`(neighbor:Memory)
-WHERE (seed.scope = $scope OR seed.scope = $extraScope)
-  AND (edge.scope = $scope OR edge.scope = $extraScope)
-  AND (neighbor.scope = $scope OR neighbor.scope = $extraScope)
-RETURN neighbor.id, edge.id, edge.kind, edge.source, edge.weight, edge.scope;`, parameters)
-		if err != nil {
-			return nil, err
+	edges, err := s.visibleEdges(protocol.HistoryRequest{Scope: request.Scope, IncludeGlobal: request.IncludeGlobal, ID: seed.ID}, true)
+	if err != nil {
+		return nil, err
+	}
+	for _, edge := range edges {
+		neighbor := indexes.document(edge.ID)
+		if neighbor == nil || neighbor.ID == seed.ID {
+			continue
 		}
-		for _, row := range rows {
-			neighborID, idOK := row[0].(string)
-			relID, relOK := row[1].(string)
-			kind, kindOK := row[2].(string)
-			source, sourceOK := row[3].(string)
-			weight, weightOK := row[4].(float64)
-			owner, scopeOK := row[5].(string)
-			if !scopeOK || !idOK || !relOK || !kindOK || !sourceOK || !weightOK {
-				return nil, errors.New("Invalid relationship in the database.")
-			}
-			neighbor := indexes.document(neighborID)
-			if neighbor == nil || neighbor.ID == seed.ID {
-				continue
-			}
-			fromID, toID := seed.ID, neighbor.ID
-			if traversal.direction == "reverse" {
-				fromID, toID = toID, fromID
-			}
-			keepBest(bestByID, protocol.Match{Memory: neighbor.Memory, Reason: protocol.Reason{
-				Kind: "relationship",
-				Path: &protocol.Path{
-					Scope: owner, RelationshipID: relID, FromID: fromID, ToID: toID, Kind: kind, Source: source,
-					Direction: traversal.direction, Weight: weight,
-				},
-			}})
-		}
+		keepBest(bestByID, protocol.Match{Memory: neighbor.Memory, Reason: protocol.Reason{Kind: "relationship", Path: &edge.Path}})
 	}
 	neighbors := sortedNeighbors(bestByID)
 	return neighbors[:min(neighborsPerMatch, len(neighbors))], nil
