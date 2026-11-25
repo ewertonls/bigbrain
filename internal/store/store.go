@@ -18,6 +18,7 @@ import (
 type Store struct {
 	database   *lbug.Database
 	connection *lbug.Connection
+	indexes    map[string]*scopeIndex
 
 	// The process-level acceptance tests use these transaction boundaries.
 	BeforeCommit func()
@@ -51,7 +52,7 @@ func Open(path string) (*Store, error) {
 		database.Close()
 		return nil, protocol.NewError("DATABASE_UNAVAILABLE", "Could not connect to LadybugDB: "+err.Error())
 	}
-	store := &Store{database: database, connection: connection}
+	store := &Store{database: database, connection: connection, indexes: make(map[string]*scopeIndex)}
 	if err := store.openSchema(); err != nil {
 		store.Close()
 		return nil, err
@@ -68,7 +69,7 @@ func (s *Store) Record(request protocol.RecordRequest) (protocol.WriteResult, er
 	if err := request.Validate(); err != nil {
 		return protocol.WriteResult{}, err
 	}
-	return s.write("record", request.Scope, request.Key, request, func(id string) error {
+	result, err := s.write("record", request.Scope, request.Key, request, func(id string) error {
 		memoryType := request.Type
 		if memoryType == "" {
 			memoryType = "unknown"
@@ -79,6 +80,11 @@ func (s *Store) Record(request protocol.RecordRequest) (protocol.WriteResult, er
 		})
 		return err
 	})
+	// Publish the invalidation only after the database transaction commits.
+	if err == nil && !result.Replayed {
+		delete(s.indexes, request.Scope)
+	}
+	return result, err
 }
 
 func (s *Store) Link(request protocol.LinkRequest) (protocol.WriteResult, error) {

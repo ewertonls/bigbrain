@@ -116,9 +116,11 @@ type Match struct {
 }
 
 type Reason struct {
-	Kind  string   `json:"kind"`
-	Terms []string `json:"terms,omitempty"`
-	Path  *Path    `json:"path,omitempty"`
+	BM25   float64  `json:"bm25,omitempty"`
+	Cosine float64  `json:"cosine,omitempty"`
+	Kind   string   `json:"kind"`
+	Terms  []string `json:"terms,omitempty"`
+	Path   *Path    `json:"path,omitempty"`
 }
 
 type Path struct {
