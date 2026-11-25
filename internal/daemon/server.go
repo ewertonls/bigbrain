@@ -71,14 +71,15 @@ func Serve(dbDir string) (err error) {
 	if err := clearStaleSocket(t); err != nil {
 		return protocol.NewError("STARTUP_FAILED", err.Error())
 	}
-	info, err := os.Lstat(t.databasePath())
+	dbFile := DatabaseFile(t.dir)
+	info, err := os.Lstat(dbFile)
 	if err == nil && (!info.Mode().IsRegular() || info.Sys().(*syscall.Stat_t).Uid != uint32(os.Geteuid())) {
 		return protocol.NewError("STARTUP_FAILED", "The database must be a regular file owned by this user.")
 	}
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return protocol.NewError("STARTUP_FAILED", err.Error())
 	}
-	database, err := store.Open(t.databasePath())
+	database, err := store.Open(dbFile)
 	if err != nil {
 		return err
 	}
