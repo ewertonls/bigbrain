@@ -21,8 +21,11 @@ const overview = `Usage: bigbrain [flags] COMMAND
 
 Commands:
   record           Store a memory with its source.
-  link             Connect two memories in the same scope.
+  link             Connect memories within a scope or between a project and global.
   query            Search memories or look up an ID.
+  invalidate       Hide a memory and preserve its history.
+  history          Inspect a memory and its visible relationships.
+  delete           Delete a memory and its incident relationships.
   db-path          Print the absolute path to the shared database file.
   project init ID  Save the project ID for this Git repository.
   status           Show the daemon state.
@@ -184,6 +187,7 @@ func execute(args []string, options *options) (any, error) {
 		return locateDatabase(selected, options.db)
 	case "record":
 		var request protocol.RecordRequest
+		flags.StringVar(&request.Type, "type", "", "semantic, episodic, procedural, decision, preference, entity or observation")
 		flags.StringVar(&request.Key, "key", "", "idempotency key (required)")
 		flags.StringVar(&request.Text, "text", "", "memory text (required)")
 		flags.StringVar(&request.Source, "source", "", "memory source (required)")
@@ -197,11 +201,28 @@ func execute(args []string, options *options) (any, error) {
 		flags.StringVar(&request.Source, "source", "", "relationship provenance (required)")
 		flags.Float64Var(&request.Weight, "weight", 1, "relationship priority")
 		return dataCommand[protocol.WriteResult](flags, args, &scope, options, &request.Scope, &request)
+	case "invalidate":
+		var request protocol.InvalidateRequest
+		memoryWriteFlags(flags, &request.MemoryWriteRequest)
+		flags.StringVar(&request.Reason, "reason", "", "reason for invalidation (required)")
+		flags.StringVar(&request.Source, "source", "", "source of invalidation (required)")
+		return dataCommand[protocol.WriteResult](flags, args, &scope, options, &request.Scope, &request)
+	case "delete":
+		var request protocol.MemoryWriteRequest
+		memoryWriteFlags(flags, &request)
+		return dataCommand[protocol.WriteResult](flags, args, &scope, options, &request.Scope, &request)
+	case "history":
+		var request protocol.HistoryRequest
+		flags.StringVar(&request.ID, "id", "", "memory ID (required)")
+		flags.BoolVar(&request.IncludeGlobal, "include-global", false, "include visible global records")
+		flags.IntVar(&request.Limit, "limit", protocol.DefaultQueryLimit, "maximum related records per page")
+		flags.StringVar(&request.After, "after", "", "relationship cursor from the previous page")
+		return dataCommand[protocol.HistoryResult](flags, args, &scope, options, &request.Scope, &request)
 	case "query":
 		var request protocol.QueryRequest
 		flags.StringVar(&request.Text, "text", "", "search text (use either -text or -id)")
 		flags.StringVar(&request.ID, "id", "", "memory ID")
-		flags.StringVar(&request.Mode, "mode", "associative", "retrieval mode: text or associative")
+		flags.StringVar(&request.Mode, "mode", "hybrid", "retrieval mode: hybrid, text or associative")
 		flags.IntVar(&request.Limit, "limit", protocol.DefaultQueryLimit, "maximum results")
 		flags.BoolVar(&request.IncludeGlobal, "include-global", false, "include global records")
 		return dataCommand[protocol.QueryResult](flags, args, &scope, options, &request.Scope, &request)
@@ -209,6 +230,11 @@ func execute(args []string, options *options) (any, error) {
 		options.json = requestsJSON(flags, args, options.json)
 		return nil, invalid("Unknown command. Run bigbrain help for usage.")
 	}
+}
+
+func memoryWriteFlags(flags *flag.FlagSet, request *protocol.MemoryWriteRequest) {
+	flags.StringVar(&request.Key, "key", "", "idempotency key (required)")
+	flags.StringVar(&request.ID, "id", "", "memory ID (required)")
 }
 
 func dataCommand[R any](flags *flag.FlagSet, args []string, selection *scopeOptions,

@@ -69,6 +69,7 @@ type RecordRequest struct {
 	Key    string `json:"key"`
 	Text   string `json:"text"`
 	Source string `json:"source"`
+	Type   string `json:"type,omitempty"`
 }
 
 type LinkRequest struct {
@@ -96,11 +97,13 @@ type WriteResult struct {
 }
 
 type QueryResult struct {
-	Matches []Match `json:"matches"`
-	Count   int     `json:"count"`
+	Fallback string  `json:"fallback,omitempty"`
+	Matches  []Match `json:"matches"`
+	Count    int     `json:"count"`
 }
 
 type Memory struct {
+	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Scope      string `json:"scope"`
 	Text       string `json:"text"`
@@ -114,12 +117,17 @@ type Match struct {
 }
 
 type Reason struct {
-	Kind  string   `json:"kind"`
-	Terms []string `json:"terms,omitempty"`
-	Path  *Path    `json:"path,omitempty"`
+	Score      float64  `json:"score,omitempty"`
+	GraphScore float64  `json:"graph_score,omitempty"`
+	BM25       float64  `json:"bm25,omitempty"`
+	Cosine     float64  `json:"cosine,omitempty"`
+	Kind       string   `json:"kind"`
+	Terms      []string `json:"terms,omitempty"`
+	Path       *Path    `json:"path,omitempty"`
 }
 
 type Path struct {
+	Scope          string  `json:"scope"`
 	RelationshipID string  `json:"relationship_id"`
 	FromID         string  `json:"from_id"`
 	ToID           string  `json:"to_id"`
@@ -153,6 +161,11 @@ func (r RecordRequest) Validate() error {
 	if !validText(r.Key, 256) || !validText(r.Text, maxMemoryTextBytes) || !validText(r.Source, maxSourceBytes) {
 		return NewError("INVALID_REQUEST", "Record requires a valid key, text, and source.")
 	}
+	switch r.Type {
+	case "", "semantic", "episodic", "procedural", "decision", "preference", "entity", "observation":
+	default:
+		return NewError("INVALID_REQUEST", "Unknown memory type.")
+	}
 	return nil
 }
 
@@ -168,19 +181,26 @@ func (r LinkRequest) Validate() error {
 	return nil
 }
 
-func (r QueryRequest) Validate() error {
-	if err := validateScope(r.Scope); err != nil {
+func validateReadScope(scope string, includeGlobal bool) error {
+	if err := validateScope(scope); err != nil {
 		return err
 	}
-	if r.IncludeGlobal && r.Scope == "global" {
+	if includeGlobal && scope == "global" {
 		return NewError("INVALID_SCOPE", "Global inclusion requires a project scope.")
+	}
+	return nil
+}
+
+func (r QueryRequest) Validate() error {
+	if err := validateReadScope(r.Scope, r.IncludeGlobal); err != nil {
+		return err
 	}
 	if (r.ID == "") == (r.Text == "") || r.ID != "" && !validText(r.ID, 256) ||
 		r.Text != "" && !validText(r.Text, maxQueryTextBytes) {
 		return NewError("INVALID_REQUEST", "Query requires either valid search text or a memory ID.")
 	}
-	if r.Mode != "" && r.Mode != "text" && r.Mode != "associative" {
-		return NewError("INVALID_REQUEST", "Query mode must be text or associative.")
+	if r.Mode != "" && r.Mode != "text" && r.Mode != "associative" && r.Mode != "hybrid" {
+		return NewError("INVALID_REQUEST", "Query mode must be text, associative or hybrid.")
 	}
 	if r.Limit < 0 || r.Limit > MaxQueryLimit {
 		return NewError("INVALID_REQUEST", "Query limit must be between 1 and 100.")

@@ -2,7 +2,9 @@
 
 BigBrain stores local memories and the relationships that connect them. A
 later session can find a decision and follow it to the original evidence.
-Foundation runs offline on Debian 12 ARM64 with LadybugDB 0.17.0.
+The Memory release adds typed records, local hybrid search and scoped history
+on LadybugDB 0.17.0. Stop a running Foundation daemon before starting the
+new binary so it can migrate the database.
 
 ## Local development
 
@@ -74,9 +76,9 @@ Use `bigbrain help` to list commands. Run `bigbrain query -h` or
 bigbrain project init orbit
 
 bigbrain --json record --current-project --key orbit-decision-12 \
-  --text 'Orbit sends readings in batches.' --source 'Decision 12'
+  --type decision --text 'Orbit sends readings in batches.' --source 'Decision 12'
 bigbrain --json record --current-project --key orbit-test-7 \
-  --text 'The receiver accepts only one request per minute.' --source 'Test 7'
+  --type observation --text 'The receiver accepts only one request per minute.' --source 'Test 7'
 
 # Substitute the two IDs returned by record.
 bigbrain --json link --current-project --key orbit-review-12 \
@@ -87,23 +89,85 @@ bigbrain shutdown
 bigbrain --json query --current-project --text Orbit --limit 2
 ```
 
+The optional `record --type` accepts `semantic`, `episodic`, `procedural`,
+`decision`, `preference`, `entity`, or `observation`. A query returns
+`type: "unknown"` for an untyped memory. Opening a Foundation database
+migrates it in one transaction and preserves IDs, sources, links and
+previously issued write receipts.
+
 `project init` stores the chosen ID in the Git common directory, so separate
 worktrees share it. Every data command requires a scope. Use
 `--project ID` for a specific project or `--global` to select the global
 collection. To publish reviewed information, record a new global memory with
 the approved text, its own source, and a fresh key. A project query includes
-global memories when passed `--include-global`.
+global memories when passed `--include-global`. Use the project scope to
+link a project memory to a global memory in either direction. The project
+owns the relationship. Both endpoints and the relationship must be visible
+for a query to return its path, source or ranking contribution.
 
-Use `--mode text` for the text-only control and `--id ID` for an exact lookup
-within the selected scope. By default, search uses associative mode and returns
-up to ten results. Text matching uses case-insensitive words. Each text match
-can contribute up to five distinct neighbors. An indirect result includes the
-stored relationship, the direction traveled, and the relationship source.
-`count` is the number of unique matches before the result limit.
+Use `--id ID` for an exact lookup. The CLI defaults to hybrid retrieval
+with a limit of ten. The Foundation controls remain available as `--mode
+text` and `--mode associative`. The latter follows up to five distinct
+neighbors per text match. A v1 request that omits `mode` keeps the
+Foundation associative behavior.
+
+## Offline hybrid search
+
+Configure the daemon with a local word2vec text vocabulary. The file begins
+with the word count and dimension, followed by one word and its vector per
+line. Plain text and gzip are supported. For each word used in an embedding,
+BigBrain tries the original spelling first, then its lowercase form.
+The evaluation used Stanford GloVe
+Wiki/Gigaword, 400,000 words and 50 dimensions. Download it once during
+setup. The daemon reads the local file when it first receives a hybrid query.
+
+```sh
+mkdir -p build/models
+curl -fL -o build/models/glove-50.gz https://github.com/piskvorky/gensim-data/releases/download/glove-wiki-gigaword-50/glove-wiki-gigaword-50.gz
+echo '5c55f98957aa9fed8d2ac5fb1dcff57af3b23c5a3ee7af3f7945f8d49198eb24  build/models/glove-50.gz' | sha256sum -c -
+export BIGBRAIN_EMBEDDINGS="$PWD/build/models/glove-50.gz"
+bigbrain shutdown
+bigbrain --json query --current-project --mode hybrid --text 'shipping binaries' --limit 3
+```
+
+The result includes the memory source and a `reason` with the contributing
+BM25 terms and score, cosine similarity, or strongest visible one-hop path.
+A path identifies its stored direction, traversal direction, owner, weight
+and source. The final score combines normalized BM25, cosine and the best
+weighted graph contribution. Ties break by memory ID. The `count` includes
+the unique candidates before the output limit.
+
+If the model is missing, unreadable, or has no usable embedding, hybrid
+returns the text-plus-graph results and a machine-readable `fallback` reason.
+Start the daemon with `BIGBRAIN_VECTOR_INDEX=off` to disable the vector
+index. Restart it after changing its environment or vocabulary. All searches
+run locally. [GloVe model and license](https://nlp.stanford.edu/projects/glove/)
+
+## Invalidation, history and deletion
+
+```sh
+bigbrain invalidate --project orbit --key review-17 --id EVIDENCE_ID \
+  --reason 'Superseded by the repeat trial' --source 'Review 17'
+bigbrain --json history --project orbit --id EVIDENCE_ID
+bigbrain delete --project orbit --key remove-17 --id EVIDENCE_ID
+```
+
+Invalidation hides the memory and its links from ordinary reads. History
+returns the reason, review source and time, plus related memories with their
+own status and link provenance. Use `--include-global` to inspect visible
+project–global links. For another page, pass the returned `next_cursor` to
+`--after`. A second invalidation with a different key reports
+`ALREADY_INVALIDATED`.
+
+Deletion removes the memory, incident links and derived search entries. A
+published global memory has its own ID and survives deletion of its private
+source. Retrying a deleted resource's creation returns `RESOURCE_DELETED`.
+A changed request with the same key returns `IDEMPOTENCY_CONFLICT`.
+Retry the deletion with its original key to retrieve its acknowledgment.
 
 ## Integration and retries
 
-Before invoking `record` or `link`, save the database, command, resolved
+Before invoking `record`, `link`, `invalidate` or `delete`, save the database, command, resolved
 scope, payload flags, and caller-generated `--key` in the agent's task
 record. After a timeout or lost response, run the same request using that
 saved information. The daemon returns the original ID with
@@ -119,9 +183,9 @@ Scope limits what a request can read or link within that account. Treat memory
 text as evidence and obtain authorization separately for any actions it suggests.
 
 Local protocol clients call `GET /status` to verify `version`, `database_id`,
-and `instance_id`. They send JSON to `POST /v1/record`, `/v1/link`, or
-`/v1/query` with `X-BigBrain-Version: 1` and `X-BigBrain-Instance` set to the
+and `instance_id`. They send JSON to `POST /v1/record`, `/v1/link`,
+`/v1/query`, `/v1/history`, `/v1/invalidate` or `/v1/delete` with `X-BigBrain-Version: 1` and `X-BigBrain-Instance` set to the
 verified instance ID. Request scopes use `project:ID` or `global`.
 
-See the [Foundation specification](docs/SPEC.md) and
-[retrieval evaluation](docs/FOUNDATION-EVALUATION.md) for acceptance criteria.
+The retrieval evaluations report source hits, irrelevant results and measured
+costs. [Memory evaluation](docs/MEMORY-EVALUATION.md) · [Foundation evaluation](docs/FOUNDATION-EVALUATION.md) · [Foundation specification](docs/SPEC.md)

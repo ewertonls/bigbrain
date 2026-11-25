@@ -14,12 +14,13 @@ import (
 	"github.com/ewertonls/bigbrain/internal/protocol"
 )
 
-const schemaVersion = "1"
-
 // Store owns one native connection. The daemon serializes access to it.
 type Store struct {
-	database   *lbug.Database
-	connection *lbug.Connection
+	database       *lbug.Database
+	connection     *lbug.Connection
+	indexes        map[string]*scopeIndex
+	model          *embeddings
+	vectorFallback string
 
 	// The process-level acceptance tests use these transaction boundaries.
 	BeforeCommit func()
@@ -53,68 +54,12 @@ func Open(path string) (*Store, error) {
 		database.Close()
 		return nil, protocol.NewError("DATABASE_UNAVAILABLE", "Could not connect to LadybugDB: "+err.Error())
 	}
-	store := &Store{database: database, connection: connection}
+	store := &Store{database: database, connection: connection, indexes: make(map[string]*scopeIndex)}
 	if err := store.openSchema(); err != nil {
 		store.Close()
 		return nil, err
 	}
 	return store, nil
-}
-
-func (s *Store) openSchema() error {
-	tables, err := s.query("CALL SHOW_TABLES() RETURN name;", nil)
-	if err != nil {
-		return protocol.NewError("DATABASE_UNAVAILABLE", "Could not read the LadybugDB catalog: "+err.Error())
-	}
-	if len(tables) == 0 {
-		if err := s.createSchema(); err != nil {
-			return protocol.NewError("DATABASE_UNAVAILABLE", "Could not initialize the BigBrain schema: "+err.Error())
-		}
-		return nil
-	}
-	version, err := s.query("MATCH (schema:BigBrainSchema {name: 'foundation'}) RETURN schema.version;", nil)
-	if err != nil || len(version) != 1 || version[0][0] != schemaVersion {
-		return protocol.NewError("DATABASE_INCOMPATIBLE", "The database does not use the BigBrain Foundation schema.")
-	}
-
-	// Binding these column names also detects a partial or damaged catalog.
-	for _, statement := range []string{
-		"MATCH (m:Memory) RETURN m.id, m.scope, m.text, m.source, m.recorded_at LIMIT 0;",
-		"MATCH (r:Receipt) RETURN r.key, r.operation, r.scope, r.fingerprint, r.result_id LIMIT 0;",
-		"MATCH (:Memory)-[r:Evidence]->(:Memory) RETURN r.id, r.kind, r.weight, r.source LIMIT 0;",
-	} {
-		if _, err := s.query(statement, nil); err != nil {
-			return protocol.NewError("DATABASE_INCOMPATIBLE", "The database is missing part of the BigBrain Foundation schema: "+err.Error())
-		}
-	}
-	return nil
-}
-
-func (s *Store) createSchema() error {
-	if _, err := s.query("BEGIN TRANSACTION;", nil); err != nil {
-		return err
-	}
-	committed := false
-	defer s.rollbackUnlessCommitted(&committed)
-
-	for _, statement := range []string{
-		"CREATE NODE TABLE BigBrainSchema(name STRING, version STRING, PRIMARY KEY(name));",
-		"CREATE NODE TABLE Memory(id STRING, scope STRING, text STRING, source STRING, recorded_at STRING, PRIMARY KEY(id));",
-		"CREATE NODE TABLE Receipt(key STRING, operation STRING, scope STRING, fingerprint STRING, result_id STRING, PRIMARY KEY(key));",
-		"CREATE REL TABLE Evidence(FROM Memory TO Memory, id STRING, kind STRING, weight DOUBLE, source STRING);",
-	} {
-		if _, err := s.query(statement, nil); err != nil {
-			return err
-		}
-	}
-	if _, err := s.query("CREATE (:BigBrainSchema {name: 'foundation', version: $version});", map[string]any{"version": schemaVersion}); err != nil {
-		return err
-	}
-	if _, err := s.query("COMMIT;", nil); err != nil {
-		return err
-	}
-	committed = true
-	return nil
 }
 
 func (s *Store) Close() {
@@ -126,10 +71,14 @@ func (s *Store) Record(request protocol.RecordRequest) (protocol.WriteResult, er
 	if err := request.Validate(); err != nil {
 		return protocol.WriteResult{}, err
 	}
-	return s.write("record", request.Scope, request.Key, request, func(id string) error {
-		_, err := s.query(`CREATE (:Memory {id: $id, scope: $scope, text: $text, source: $source, recorded_at: $recordedAt});`, map[string]any{
+	return s.write("record", request.Scope, request.Key, "", request, func(id string) error {
+		memoryType := request.Type
+		if memoryType == "" {
+			memoryType = "unknown"
+		}
+		_, err := s.query(`CREATE (:Memory {id: $id, scope: $scope, text: $text, source: $source, recorded_at: $recordedAt, memory_type: $type, status: 'active'});`, map[string]any{
 			"id": id, "scope": request.Scope, "text": request.Text, "source": request.Source,
-			"recordedAt": time.Now().UTC().Format(time.RFC3339Nano),
+			"recordedAt": time.Now().UTC().Format(time.RFC3339Nano), "type": memoryType,
 		})
 		return err
 	})
@@ -143,11 +92,12 @@ func (s *Store) Link(request protocol.LinkRequest) (protocol.WriteResult, error)
 	if request.Weight == 0 {
 		request.Weight = 0
 	}
-	return s.write("link", request.Scope, request.Key, request, func(id string) error {
+	return s.write("link", request.Scope, request.Key, "", request, func(id string) error {
 		rows, err := s.query(`
 MATCH (a:Memory {id: $from}), (b:Memory {id: $to})
-WHERE a.scope = $scope AND b.scope = $scope
-CREATE (a)-[:Evidence {id: $id, kind: $kind, weight: $weight, source: $source}]->(b)
+WHERE (a.scope = $scope OR a.scope = 'global') AND (b.scope = $scope OR b.scope = 'global')
+  AND (a.scope = $scope OR b.scope = $scope) AND a.status = 'active' AND b.status = 'active'
+CREATE (a)-[:Evidence {id: $id, scope: $scope, kind: $kind, weight: $weight, source: $source}]->(b)
 RETURN a.id;`, map[string]any{
 			"from": request.FromID, "to": request.ToID, "scope": request.Scope, "id": id,
 			"kind": request.Kind, "weight": request.Weight, "source": request.Source,
@@ -156,13 +106,13 @@ RETURN a.id;`, map[string]any{
 			return err
 		}
 		if len(rows) == 0 {
-			return protocol.NewError("NOT_FOUND", "Both memories must exist in the selected scope.")
+			return protocol.NewError("NOT_FOUND", "The selected scope cannot link these endpoints.")
 		}
 		return nil
 	})
 }
 
-func (s *Store) write(operation, scope, key string, request any, mutate func(id string) error) (protocol.WriteResult, error) {
+func (s *Store) write(operation, scope, key, targetID string, request any, mutate func(id string) error) (protocol.WriteResult, error) {
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return protocol.WriteResult{}, err
@@ -177,13 +127,16 @@ func (s *Store) write(operation, scope, key string, request any, mutate func(id 
 	committed := false
 	defer s.rollbackUnlessCommitted(&committed)
 
-	rows, err := s.query("MATCH (r:Receipt {key: $key}) RETURN r.operation, r.scope, r.fingerprint, r.result_id;", map[string]any{"key": key})
+	rows, err := s.query("MATCH (r:Receipt {key: $key}) RETURN r.operation, r.scope, r.fingerprint, r.result_id, r.deleted;", map[string]any{"key": key})
 	if err != nil {
 		return result, err
 	}
 	if len(rows) == 1 {
 		row := rows[0]
-		if row[0] != operation || row[1] != scope || row[2] != fingerprint {
+		if row[4] == true && row[2] == removedFingerprint(operation, scope, fingerprint) {
+			return result, protocol.NewError("RESOURCE_DELETED", "The resource created by this request has been deleted.")
+		}
+		if row[4] == true || row[0] != operation || row[1] != scope || row[2] != fingerprint {
 			return result, protocol.NewError("IDEMPOTENCY_CONFLICT", "This idempotency key is already in use.")
 		}
 		id, ok := row[3].(string)
@@ -192,12 +145,15 @@ func (s *Store) write(operation, scope, key string, request any, mutate func(id 
 		}
 		return protocol.WriteResult{ID: id, Replayed: true}, nil
 	}
-	result.ID = rand.Text()
+	result.ID = targetID
+	if result.ID == "" {
+		result.ID = rand.Text()
+	}
 	if err := mutate(result.ID); err != nil {
 		return protocol.WriteResult{}, err
 	}
 	if _, err := s.query(`
-CREATE (:Receipt {key: $key, operation: $operation, scope: $scope, fingerprint: $fingerprint, result_id: $id});`, map[string]any{
+CREATE (:Receipt {key: $key, operation: $operation, scope: $scope, fingerprint: $fingerprint, result_id: $id, deleted: false});`, map[string]any{
 		"key": key, "operation": operation, "scope": scope, "fingerprint": fingerprint, "id": result.ID,
 	}); err != nil {
 		return protocol.WriteResult{}, err
@@ -209,6 +165,9 @@ CREATE (:Receipt {key: $key, operation: $operation, scope: $scope, fingerprint: 
 		return protocol.WriteResult{}, err
 	}
 	committed = true
+	if operation != "link" {
+		delete(s.indexes, scope)
+	}
 	if s.AfterCommit != nil {
 		s.AfterCommit()
 	}

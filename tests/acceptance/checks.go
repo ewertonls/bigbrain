@@ -42,9 +42,11 @@ func verifyScopes(c cli, f fixture) {
 		"lost private or reviewed global provenance: %+v", withGlobal)
 	expectPath(got[f.evidence], f, "forward", "Test 7")
 	crossProject := expectError(c.run(linkArgs("link-b", f.decision, projectB)...), "NOT_FOUND")
-	crossGlobal := expectError(c.run(linkArgs("link-g", f.decision, global)...), "NOT_FOUND")
+	write(c, linkArgs("link-g", f.decision, global)...)
+	queryIDs(queryText(c, "shared", "associative", "3", "--project", "A", "--include-global"), global, f.decision)
+	queryIDs(queryText(c, "shared", "associative", "3", "--global"), global)
 	missing := expectError(c.run(linkArgs("link-missing", f.decision, "missing")...), "NOT_FOUND")
-	require(crossProject == missing && crossGlobal == missing, "link error reveals whether another scope contains the ID")
+	require(crossProject == missing, "link error reveals whether another scope contains the ID")
 
 	recordConflict := expectError(c.run(recordArgs("d1", decisionText, "Decision 12", "--project", "B")...), "IDEMPOTENCY_CONFLICT")
 	linkConflict := expectError(c.run(linkArgs("d1", f.decision, f.evidence)...), "IDEMPOTENCY_CONFLICT")
@@ -94,10 +96,10 @@ func snapshot(c cli) databaseSnapshot {
 	check(err)
 	defer conn.Close()
 	return databaseSnapshot{
-		Memories: rows(conn, "MATCH (m:Memory) RETURN m.id, m.scope, m.text, m.source, m.recorded_at ORDER BY m.id"),
+		Memories: rows(conn, "MATCH (m:Memory) RETURN m.id, m.scope, m.text, m.source, m.recorded_at, m.memory_type, m.status, m.invalid_reason, m.invalid_source, m.invalid_at ORDER BY m.id"),
 		Relationships: rows(conn, `MATCH (a:Memory)-[e:Evidence]->(b:Memory)
-RETURN e.id, a.id, b.id, e.kind, e.weight, e.source ORDER BY e.id`),
-		Receipts: rows(conn, "MATCH (r:Receipt) RETURN r.key, r.operation, r.scope, r.fingerprint, r.result_id ORDER BY r.key"),
+RETURN e.id, a.id, b.id, e.kind, e.weight, e.source, e.scope ORDER BY e.id`),
+		Receipts: rows(conn, "MATCH (r:Receipt) RETURN r.key, r.operation, r.scope, r.fingerprint, r.result_id, r.deleted ORDER BY r.key"),
 	}
 }
 
@@ -230,6 +232,44 @@ func pausedWrite(c cli, instrumented, phase string, args []string) (statusResult
 	return running, marker, pending
 }
 
+func interrupt(daemon statusResult, pending <-chan invocation) {
+	process, err := os.FindProcess(daemon.PID)
+	check(err)
+	check(process.Kill())
+	message := expectError(<-pending, "DAEMON_UNAVAILABLE")
+	require(strings.Contains(message, "saved request and key"), "interrupted write lacked retry guidance: %q", message)
+}
+
+func verifyDeleteCrash(c cli, instrumented, phase string) {
+	f := seed(c, true)
+	invalidate := []string{"invalidate", "--project", "A", "--key", "dispute", "--id", f.evidence, "--reason", "Revised trial", "--source", "Second review"}
+	write(c, invalidate...)
+	remove := []string{"delete", "--project", "A", "--key", "remove", "--id", f.evidence}
+	shutdown(c)
+	daemon, _, pending := pausedWrite(c, instrumented, phase, remove)
+	interrupt(daemon, pending)
+	history := []string{"history", "--project", "A", "--id", f.evidence}
+	creation := recordArgs("e1", evidenceText, "Test 7", "--project", "A")
+	link := linkArgs("d1-e1", f.decision, f.evidence)
+	if phase == "before" {
+		existing := decode[struct {
+			Status  string
+			Related []struct{ ID string }
+		}](c.run(history...))
+		require(existing.Status == "invalidated" && len(existing.Related) == 1 && existing.Related[0].ID == f.decision, "uncommitted delete changed history")
+		require(write(c, creation...).Replayed && write(c, link...).Replayed, "uncommitted delete changed a receipt")
+	} else {
+		expectError(c.run(history...), "NOT_FOUND")
+		expectError(c.run(creation...), "RESOURCE_DELETED")
+		expectError(c.run(link...), "RESOURCE_DELETED")
+	}
+	replay := write(c, remove...)
+	require(replay.ID == f.evidence && replay.Replayed == (phase == "after"), "wrong deletion acknowledgment: %+v", replay)
+	expectError(c.run(creation...), "RESOURCE_DELETED")
+	expectError(c.run(link...), "RESOURCE_DELETED")
+	shutdown(c)
+}
+
 func verifyCrash(c cli, instrumented, phase string) {
 	key := "interrupt-" + phase
 	args := recordArgs(key, "Pinned retry payload", "Crash source", "--project", "A")
@@ -238,11 +278,7 @@ func verifyCrash(c cli, instrumented, phase string) {
 	savedRequest := c.db + "-request.json"
 	check(os.WriteFile(savedRequest, request, 0600))
 	daemon, _, pending := pausedWrite(c, instrumented, phase, args)
-	process, err := os.FindProcess(daemon.PID)
-	check(err)
-	check(process.Kill())
-	message := expectError(<-pending, "DAEMON_UNAVAILABLE")
-	require(strings.Contains(message, "saved request and key"), "interrupted write lacked retry guidance: %q", message)
+	interrupt(daemon, pending)
 
 	payload, err := os.ReadFile(savedRequest)
 	check(err)

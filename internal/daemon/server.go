@@ -183,6 +183,9 @@ func (s *serverState) routes() http.Handler {
 	})
 	mux.HandleFunc("POST /v1/record", operation(s, s.database.Record))
 	mux.HandleFunc("POST /v1/link", operation(s, s.database.Link))
+	mux.HandleFunc("POST /v1/invalidate", operation(s, s.database.Invalidate))
+	mux.HandleFunc("POST /v1/delete", operation(s, s.database.Delete))
+	mux.HandleFunc("POST /v1/history", operation(s, s.database.History))
 	mux.HandleFunc("POST /v1/query", operation(s, s.database.Query))
 	mux.HandleFunc("POST /v1/shutdown", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.verifyRequest(r); err != nil {
@@ -250,7 +253,9 @@ func respond(w http.ResponseWriter, result any, err error) {
 			switch responseError.Code {
 			case "SHUTTING_DOWN":
 				status = http.StatusServiceUnavailable
-			case "IDEMPOTENCY_CONFLICT", "INSTANCE_CHANGED", "VERSION_MISMATCH":
+			case "RESOURCE_DELETED":
+				status = http.StatusGone
+			case "ALREADY_INVALIDATED", "IDEMPOTENCY_CONFLICT", "INSTANCE_CHANGED", "VERSION_MISMATCH":
 				status = http.StatusConflict
 			default:
 				status = http.StatusBadRequest
