@@ -13,3 +13,13 @@ Before tuning the ranking, fix the questions from real sessions, their expected 
 Compare text-only, text-plus-graph, and hybrid retrieval on the same database. Record hits that include the expected source, irrelevant results, latency, and indexing cost. Hybrid retrieval must gain hits on paraphrases, preserve direct hits, and keep rankings isolated by project. Repeat the text and graph baselines with vector search unavailable.
 
 [Project reference](../../docs/ARCHITECTURE.md#retrieval-and-evaluation)
+
+<!-- kadai:log:start -->
+
+## Log
+
+### 2026-11-24T23:33:28-03:00
+
+Fixed the seven resumption questions, CLI search strings, expected sources, relevance sets and top-three limit in tests/memory/fixture.json before implementing search. The spike, Foundation and CLI development sessions supply the evidence. Search strings paraphrase or condense the recorded project questions. The three paraphrase strings share no tokens with their target memories.
+
+<!-- kadai:log:end -->

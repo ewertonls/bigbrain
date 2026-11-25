@@ -1,0 +1,35 @@
+{
+  "limit": 3,
+  "project": "bigbrain",
+  "memories": [
+    {"key":"queue","scope":"bigbrain","text":"Simultaneous writes must be queued to prevent a process crash.","source":"BB-0008 transaction session"},
+    {"key":"package","scope":"bigbrain","text":"Distribution bundles the executable with its native shared library.","source":"BB-0011 distribution session"},
+    {"key":"retry","scope":"bigbrain","text":"Replay an unacknowledged write with its saved idempotency key.","source":"BB-0014 protocol session"},
+    {"key":"restore","scope":"bigbrain","text":"Export records and import into a fresh database, preserving identifiers and receipts.","source":"BB-0010 migration session"},
+    {"key":"location","scope":"bigbrain","text":"Use db-path to print the absolute path to the shared storage file.","source":"28ebe22 database path change"},
+    {"key":"help","scope":"bigbrain","text":"Each command generates help from its registered flags and defaults.","source":"1212543 CLI help change"},
+    {"key":"readers","scope":"bigbrain","text":"Two thousand parallel read queries completed successfully.","source":"BB-0008 read experiment"},
+    {"key":"socket","scope":"bigbrain","text":"The operating system account owns the local Unix socket.","source":"BB-0015 scope session"},
+    {"key":"restart","scope":"bigbrain","text":"After shutdown a second session found the Orbit decision and its evidence.","source":"BB-0017 restart session"},
+    {"key":"worktrees","scope":"bigbrain","text":"Git worktrees share the configured project identity across branches.","source":"BB-0015 worktree session"},
+    {"key":"platform","scope":"bigbrain","text":"The original offline package ran on Debian ARM64 without a compiler.","source":"BB-0011 installation session"},
+    {"key":"checksum","scope":"bigbrain","text":"Verify the downloaded archive against its release checksum.","source":"e72b02e native build change"},
+    {"key":"publication","scope":"global","text":"Review provenance before publishing a reusable lesson.","source":"Architecture publication policy"},
+    {"key":"isolation","scope":"global","text":"Apply visibility checks at every traversal step.","source":"Architecture scope policy"},
+    {"key":"other","scope":"other","text":"The shipping department replaces damaged freight.","source":"Other project control"}
+  ],
+  "links": [
+    ["queue","readers"], ["package","platform"], ["package","checksum"],
+    ["retry","restart"], ["restore","retry"], ["location","worktrees"],
+    ["socket","isolation"], ["other","publication"]
+  ],
+  "questions": [
+    {"kind":"direct","question":"Which key is needed to retry an uncertain write?","search":"idempotency key","expected":"retry","relevant":["retry","restart","restore"]},
+    {"kind":"direct","question":"Where does the CLI get its help?","search":"command flags defaults","expected":"help","relevant":["help"]},
+    {"kind":"direct","question":"How do memories survive an engine upgrade?","search":"export import receipts","expected":"restore","relevant":["restore","retry"]},
+    {"kind":"graph","question":"What runtime was used to verify the original distribution?","search":"distribution bundles","expected":"platform","relevant":["package","platform","checksum"]},
+    {"kind":"paraphrase","question":"Can LadybugDB handle short writes and one-hop queries?","search":"concurrent updates","expected":"queue","relevant":["queue","readers"]},
+    {"kind":"paraphrase","question":"How should the executable be distributed?","search":"shipping binaries","expected":"package","relevant":["package","platform","checksum"]},
+    {"kind":"paraphrase","question":"Where does a scope keep its data?","search":"database location","expected":"location","relevant":["location","worktrees"]}
+  ]
+}
