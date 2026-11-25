@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
+	"time"
 
 	lbug "github.com/LadybugDB/go-ladybug"
 	"github.com/ewertonls/bigbrain/internal/protocol"
@@ -54,6 +56,52 @@ func TestWriteReceiptsSurviveReopen(t *testing.T) {
 		pathResult.ToID != evidence.ID || pathResult.Direction != "reverse" || pathResult.Source != link.Source {
 		t.Fatalf("unexpected reverse path: %+v", pathResult)
 	}
+	if pathResult.Confidence != nil || pathResult.ActivationCount == nil || *pathResult.ActivationCount != 0 || pathResult.LastActivatedAt != "" {
+		t.Fatalf("unexpected initial relationship attributes: %+v", pathResult)
+	}
+	if _, err := time.Parse(time.RFC3339Nano, pathResult.CreatedAt); err != nil {
+		t.Fatalf("invalid relationship creation time %q: %v", pathResult.CreatedAt, err)
+	}
+}
+
+func TestQueriesPreserveSynapseAttributes(t *testing.T) {
+	db := openTestStore(t, filepath.Join(t.TempDir(), "memory.lbug"))
+	const scope = "project:A"
+	from := recordForTest(t, db, protocol.RecordRequest{Scope: scope, Key: "d", Text: "Orbit", Source: "Decision"}).ID
+	to := recordForTest(t, db, protocol.RecordRequest{Scope: scope, Key: "e", Text: "receiver", Source: "Evidence"}).ID
+	link := protocol.LinkRequest{Scope: scope, Key: "link", FromID: from, ToID: to, Kind: "cites", Source: "Review", Weight: 4, Confidence: new(0.25)}
+	id := linkForTest(t, db, link).ID
+	if retry := linkForTest(t, db, link); !retry.Replayed || retry.ID != id {
+		t.Fatalf("unexpected link replay: %+v", retry)
+	}
+	link.Confidence = nil
+	_, err := db.Link(link)
+	requireCode(t, err, "IDEMPOTENCY_CONFLICT")
+
+	// Seed a recorded activation so reads must preserve a known count and timestamp.
+	const lastAt = "2026-11-25T15:00:00Z"
+	_, err = db.query("MATCH ()-[e:Evidence]->() WHERE e.id=$id SET e.activation_count=3, e.last_activated_at=$at;", map[string]any{"id": id, "at": lastAt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	history, err := db.History(protocol.HistoryRequest{Scope: scope, ID: from})
+	if err != nil || len(history.Related) != 1 {
+		t.Fatalf("history: %+v, %v", history, err)
+	}
+	want := history.Related[0].Path
+	if want.Weight != 4 || want.Confidence == nil || *want.Confidence != 0.25 || want.ActivationCount == nil ||
+		*want.ActivationCount != 3 || want.LastActivatedAt != lastAt || want.CreatedAt == "" {
+		t.Fatalf("unexpected relationship attributes: %+v", want)
+	}
+	for range 2 {
+		for _, walk := range []struct{ text, direction string }{{"Orbit", "forward"}, {"receiver", "reverse"}} {
+			got := queryForTest(t, db, protocol.QueryRequest{Scope: scope, Text: walk.text, Mode: "associative"})
+			want.Direction = walk.direction
+			if len(got.Matches) != 2 || !reflect.DeepEqual(got.Matches[1].Reason.Path, &want) {
+				t.Fatalf("%s query: got %+v, want path %+v", walk.direction, got, want)
+			}
+		}
+	}
 }
 
 func TestScopedNeighborsRankAndDeduplicate(t *testing.T) {
@@ -79,7 +127,7 @@ func TestScopedNeighborsRankAndDeduplicate(t *testing.T) {
 			link.Weight = 6.5
 			linkForTest(t, database, link)
 		}
-		if len(ranked) <= neighborsPerMatch {
+		if len(ranked) <= protocol.DefaultMaxNeighbors {
 			ranked = append(ranked, neighbor)
 		}
 	}
@@ -97,7 +145,7 @@ func TestScopedNeighborsRankAndDeduplicate(t *testing.T) {
 	for _, match := range matches.Matches {
 		ids = append(ids, match.ID)
 	}
-	if !slices.Equal(ids, ranked) || matches.Count != neighborsPerMatch+1 {
+	if !slices.Equal(ids, ranked) || matches.Count != protocol.DefaultMaxNeighbors+1 {
 		t.Fatalf("ranked IDs = %v, want %v", ids, ranked)
 	}
 	query.IncludeGlobal = true

@@ -1,14 +1,10 @@
 package store
 
 import (
-	"cmp"
 	"errors"
-	"slices"
 
 	"github.com/ewertonls/bigbrain/internal/protocol"
 )
-
-const neighborsPerMatch = 5
 
 func (s *Store) Query(request protocol.QueryRequest) (protocol.QueryResult, error) {
 	if err := request.Validate(); err != nil {
@@ -98,67 +94,4 @@ func scopeParameters(scope string, includeGlobal bool) map[string]any {
 		extraScope = "global"
 	}
 	return map[string]any{"scope": scope, "extraScope": extraScope}
-}
-
-func (s *Store) associations(request protocol.QueryRequest, seeds []protocol.Match, indexes collection) ([]protocol.Match, error) {
-	direct := make(map[string]bool, len(seeds))
-	for _, seed := range seeds {
-		direct[seed.ID] = true
-	}
-	bestByID := make(map[string]protocol.Match)
-	for _, seed := range seeds {
-		neighbors, err := s.neighbors(request, seed.Memory, indexes)
-		if err != nil {
-			return nil, err
-		}
-		for _, neighbor := range neighbors {
-			if !direct[neighbor.ID] {
-				keepBest(bestByID, neighbor)
-			}
-		}
-	}
-	return sortedNeighbors(bestByID), nil
-}
-
-func (s *Store) neighbors(request protocol.QueryRequest, seed protocol.Memory, indexes collection) ([]protocol.Match, error) {
-	bestByID := make(map[string]protocol.Match)
-	edges, err := s.visibleEdges(protocol.HistoryRequest{Scope: request.Scope, IncludeGlobal: request.IncludeGlobal, ID: seed.ID}, true)
-	if err != nil {
-		return nil, err
-	}
-	for _, edge := range edges {
-		neighbor := indexes.document(edge.ID)
-		if neighbor == nil || neighbor.ID == seed.ID {
-			continue
-		}
-		keepBest(bestByID, protocol.Match{Memory: neighbor.Memory, Reason: protocol.Reason{Kind: "relationship", Path: &edge.Path}})
-	}
-	neighbors := sortedNeighbors(bestByID)
-	return neighbors[:min(neighborsPerMatch, len(neighbors))], nil
-}
-
-func keepBest(bestByID map[string]protocol.Match, match protocol.Match) {
-	current, exists := bestByID[match.ID]
-	if !exists || compareNeighbors(match, current) < 0 {
-		bestByID[match.ID] = match
-	}
-}
-
-func sortedNeighbors(byID map[string]protocol.Match) []protocol.Match {
-	matches := make([]protocol.Match, 0, len(byID))
-	for _, match := range byID {
-		matches = append(matches, match)
-	}
-	slices.SortFunc(matches, compareNeighbors)
-	return matches
-}
-
-func compareNeighbors(a, b protocol.Match) int {
-	if weightOrder := cmp.Compare(b.Reason.Path.Weight, a.Reason.Path.Weight); weightOrder != 0 {
-		return weightOrder
-	}
-	if idOrder := cmp.Compare(a.ID, b.ID); idOrder != 0 {
-		return idOrder
-	}
-	return cmp.Compare(a.Reason.Path.RelationshipID, b.Reason.Path.RelationshipID)
 }

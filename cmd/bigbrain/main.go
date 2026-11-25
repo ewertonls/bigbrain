@@ -194,12 +194,7 @@ func execute(args []string, options *options) (any, error) {
 		return dataCommand[protocol.WriteResult](flags, args, &scope, options, &request.Scope, &request)
 	case "link":
 		var request protocol.LinkRequest
-		flags.StringVar(&request.Key, "key", "", "idempotency key (required)")
-		flags.StringVar(&request.FromID, "from", "", "source memory `ID` (required)")
-		flags.StringVar(&request.ToID, "to", "", "target memory `ID` (required)")
-		flags.StringVar(&request.Kind, "type", "", "relationship type (required)")
-		flags.StringVar(&request.Source, "source", "", "relationship provenance (required)")
-		flags.Float64Var(&request.Weight, "weight", 1, "relationship priority")
+		linkFlags(flags, &request)
 		return dataCommand[protocol.WriteResult](flags, args, &scope, options, &request.Scope, &request)
 	case "invalidate":
 		var request protocol.InvalidateRequest
@@ -225,11 +220,46 @@ func execute(args []string, options *options) (any, error) {
 		flags.StringVar(&request.Mode, "mode", "hybrid", "retrieval mode: hybrid, text or associative")
 		flags.IntVar(&request.Limit, "limit", protocol.DefaultQueryLimit, "maximum results")
 		flags.BoolVar(&request.IncludeGlobal, "include-global", false, "include global records")
+		optionalIntFlag(flags, "max-depth", &request.MaxDepth,
+			fmt.Sprintf("maximum graph hops (1-%d, default %d)", protocol.MaxGraphDepth, protocol.DefaultMaxDepth))
+		optionalIntFlag(flags, "max-neighbors", &request.MaxNeighbors,
+			fmt.Sprintf("maximum neighbors per node (1-%d, default %d)", protocol.MaxGraphNeighbors, protocol.DefaultMaxNeighbors))
 		return dataCommand[protocol.QueryResult](flags, args, &scope, options, &request.Scope, &request)
 	default:
 		options.json = requestsJSON(flags, args, options.json)
 		return nil, invalid("Unknown command. Run bigbrain help for usage.")
 	}
+}
+
+func optionalIntFlag(flags *flag.FlagSet, name string, dest **int, usage string) {
+	flags.Func(name, usage, func(value string) error {
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			return err
+		}
+		*dest = &n
+		return nil
+	})
+}
+
+func optionalFloatFlag(flags *flag.FlagSet, name string, dest **float64, usage string) {
+	flags.Func(name, usage, func(value string) error {
+		number, err := strconv.ParseFloat(value, 64)
+		if err == nil {
+			*dest = &number
+		}
+		return err
+	})
+}
+
+func linkFlags(flags *flag.FlagSet, request *protocol.LinkRequest) {
+	flags.StringVar(&request.Key, "key", "", "idempotency key (required)")
+	flags.StringVar(&request.FromID, "from", "", "source memory `ID` (required)")
+	flags.StringVar(&request.ToID, "to", "", "target memory `ID` (required)")
+	flags.StringVar(&request.Kind, "type", "", "relationship type (required)")
+	flags.StringVar(&request.Source, "source", "", "relationship provenance (required)")
+	flags.Float64Var(&request.Weight, "weight", 1, "relationship priority")
+	optionalFloatFlag(flags, "confidence", &request.Confidence, "strength of the evidence from 0 to 1 (omit if unknown)")
 }
 
 func memoryWriteFlags(flags *flag.FlagSet, request *protocol.MemoryWriteRequest) {

@@ -3,7 +3,7 @@
 BigBrain stores local memories and the relationships that connect them. A
 later session can find a decision and follow it to the original evidence.
 The Memory release adds typed records, local hybrid search and scoped history
-on LadybugDB 0.17.0. Stop a running Foundation daemon before starting the
+on LadybugDB 0.17.0. Stop a running daemon before starting the
 new binary so it can migrate the database.
 
 ## Local development
@@ -95,6 +95,14 @@ The optional `record --type` accepts `semantic`, `episodic`, `procedural`,
 migrates it in one transaction and preserves IDs, sources, links and
 previously issued write receipts.
 
+When creating a link, use `--weight` for retrieval priority and optional
+`--confidence` for the strength of the supporting evidence, from 0 to 1.
+Omitting confidence leaves it unknown. Query and history paths expose
+`confidence`, `created_at`, `activation_count` and `last_activated_at` when
+known. A new link records its creation time and starts with zero activations.
+Older links omit attributes that were never recorded. Reading a link leaves
+its attributes intact.
+
 `project init` stores the chosen ID in the Git common directory, so separate
 worktrees share it. Every data command requires a scope. Use
 `--project ID` for a specific project or `--global` to select the global
@@ -106,10 +114,50 @@ owns the relationship. Both endpoints and the relationship must be visible
 for a query to return its path, source or ranking contribution.
 
 Use `--id ID` for an exact lookup. The CLI defaults to hybrid retrieval
-with a limit of ten. The Foundation controls remain available as `--mode
-text` and `--mode associative`. The latter follows up to five distinct
-neighbors per text match. A v1 request that omits `mode` keeps the
-Foundation associative behavior.
+with a limit of ten results. Use `--mode text` for text matches alone or
+`--mode associative` to list text matches first, followed by related
+memories. A v1 request that omits `mode` uses associative retrieval.
+
+In associative and hybrid modes, `--max-depth` sets how many relationships
+to follow (1–3, default 1). `--max-neighbors` limits distinct neighbors per
+node (1–10, default 5). Both directions are eligible. Each step considers
+only visible relationships and active memories, and skips memories already
+on that path before applying the neighbor limit. At depth 1, associative
+mode retains the Foundation response format. It orders indirect matches by
+link priority, adjusted for confidence when known, and omits `graph_score`.
+
+```sh
+bigbrain --json query --current-project --mode associative --text Orbit \
+  --max-depth 3 --max-neighbors 2
+```
+
+For associative queries at depth 2 or 3, the starting score is normalized
+BM25. Hybrid queries start from the combined text and vector score at any
+depth. Each hop multiplies the previous score by `0.8 × weight / (1 + weight)`.
+Known confidence adds a factor of `(1 + confidence) / 2`. Unknown confidence
+uses a factor of 1. A zero-weight link contributes no activation in hybrid
+mode and remains traversable in associative mode.
+
+Each destination keeps its strongest graph contribution. Equally strong
+paths to the same memory favor fewer hops, then the lexicographically
+smallest sequence of relationship IDs. For a one-hop match, the relationship
+is in `reason.path`. For a two- or three-hop match, `reason.steps` lists the
+relationships in traversal order, `reason.hops` gives their count, and
+`reason.path` equals the last step. Each step identifies the relationship,
+its type, stored endpoints, traversal direction, and source.
+
+For example, with stored links `A → B ← C`, a search from A can reach C
+through B. Its explanation contains these two steps.
+
+| Step | `from_id` | `to_id` | `type` | `direction` | `source` |
+| --- | --- | --- | --- | --- | --- |
+| 1 | A | B | justified_by | forward | Decision review |
+| 2 | C | B | corroborates | reverse | Lab review |
+
+The second step goes from B to C while preserving the stored endpoints
+`C → B`. The match's top-level `source` identifies the evidence for memory C,
+such as `Trial 7`. The two step sources identify the reviews that recorded
+the relationships.
 
 ## Offline hybrid search
 
@@ -131,14 +179,15 @@ bigbrain --json query --current-project --mode hybrid --text 'shipping binaries'
 ```
 
 The result includes the memory source and a `reason` with the contributing
-BM25 terms and score, cosine similarity, or strongest visible one-hop path.
+BM25 terms and score, cosine similarity, or strongest visible graph contribution.
 A path identifies its stored direction, traversal direction, owner, weight
 and source. The final score combines normalized BM25, cosine and the best
 weighted graph contribution. Ties break by memory ID. The `count` includes
 the unique candidates before the output limit.
 
 If the model is missing, unreadable, or has no usable embedding, hybrid
-returns the text-plus-graph results and a machine-readable `fallback` reason.
+returns associative results with the same depth and neighbor limits and a
+machine-readable `fallback` reason.
 Start the daemon with `BIGBRAIN_VECTOR_INDEX=off` to disable the vector
 index. Restart it after changing its environment or vocabulary. All searches
 run locally. [GloVe model and license](https://nlp.stanford.edu/projects/glove/)

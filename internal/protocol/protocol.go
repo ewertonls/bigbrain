@@ -11,18 +11,26 @@ import (
 )
 
 const (
-	Version           = 1
-	MaxBodyBytes      = 1 << 20
-	DefaultQueryLimit = 10
-	MaxQueryLimit     = 100
+	Version             = 1
+	MaxBodyBytes        = 1 << 20
+	DefaultQueryLimit   = 10
+	MaxQueryLimit       = 100
+	DefaultMaxDepth     = 1
+	MaxGraphDepth       = 3
+	DefaultMaxNeighbors = 5
+	MaxGraphNeighbors   = 10
 
 	maxMemoryTextBytes = 64 << 10
 	maxSourceBytes     = 4 << 10
 	maxQueryTextBytes  = 4 << 10
 
-	// A byte may take six bytes after JSON escaping. Allow additional space
-	// per match for IDs, terms, and the explanation, plus the envelope.
-	MaxResponseBytes = MaxQueryLimit*(6*(maxMemoryTextBytes+2*maxSourceBytes+maxQueryTextBytes)+(16<<10)) + 1024
+	// JSON escaping can expand each input byte to six bytes. Each path entry
+	// also carries IDs, type, scope, direction, timestamps and numeric fields.
+	maxEncodedPathBytes = 6*maxSourceBytes + (8 << 10)
+	// A match may include every step and repeat the terminal step in path.
+	maxEncodedMatchBytes = 6*(maxMemoryTextBytes+maxSourceBytes+maxQueryTextBytes) + (16 << 10) +
+		(MaxGraphDepth+1)*maxEncodedPathBytes
+	MaxResponseBytes = MaxQueryLimit*maxEncodedMatchBytes + 1024
 )
 
 type Error struct {
@@ -73,13 +81,14 @@ type RecordRequest struct {
 }
 
 type LinkRequest struct {
-	Scope  string  `json:"scope"`
-	Key    string  `json:"key"`
-	FromID string  `json:"from_id"`
-	ToID   string  `json:"to_id"`
-	Kind   string  `json:"type"`
-	Source string  `json:"source"`
-	Weight float64 `json:"weight"`
+	Scope      string   `json:"scope"`
+	Key        string   `json:"key"`
+	FromID     string   `json:"from_id"`
+	ToID       string   `json:"to_id"`
+	Kind       string   `json:"type"`
+	Source     string   `json:"source"`
+	Weight     float64  `json:"weight"`
+	Confidence *float64 `json:"confidence,omitempty"`
 }
 
 type QueryRequest struct {
@@ -89,6 +98,8 @@ type QueryRequest struct {
 	Mode          string `json:"mode,omitempty"`
 	IncludeGlobal bool   `json:"include_global,omitempty"`
 	Limit         int    `json:"limit,omitempty"`
+	MaxDepth      *int   `json:"max_depth,omitempty"`
+	MaxNeighbors  *int   `json:"max_neighbors,omitempty"`
 }
 
 type WriteResult struct {
@@ -124,17 +135,23 @@ type Reason struct {
 	Kind       string   `json:"kind"`
 	Terms      []string `json:"terms,omitempty"`
 	Path       *Path    `json:"path,omitempty"`
+	Hops       int      `json:"hops,omitempty"`
+	Steps      []Path   `json:"steps,omitempty"`
 }
 
 type Path struct {
-	Scope          string  `json:"scope"`
-	RelationshipID string  `json:"relationship_id"`
-	FromID         string  `json:"from_id"`
-	ToID           string  `json:"to_id"`
-	Kind           string  `json:"type"`
-	Source         string  `json:"source"`
-	Direction      string  `json:"direction"`
-	Weight         float64 `json:"weight"`
+	Scope           string   `json:"scope"`
+	RelationshipID  string   `json:"relationship_id"`
+	FromID          string   `json:"from_id"`
+	ToID            string   `json:"to_id"`
+	Kind            string   `json:"type"`
+	Source          string   `json:"source"`
+	Direction       string   `json:"direction"`
+	Weight          float64  `json:"weight"`
+	Confidence      *float64 `json:"confidence,omitempty"`
+	ActivationCount *int64   `json:"activation_count,omitempty"`
+	LastActivatedAt string   `json:"last_activated_at,omitempty"`
+	CreatedAt       string   `json:"created_at,omitempty"`
 }
 
 var projectID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
@@ -178,6 +195,9 @@ func (r LinkRequest) Validate() error {
 		math.IsNaN(r.Weight) || math.IsInf(r.Weight, 0) || r.Weight < 0 {
 		return NewError("INVALID_REQUEST", "Link requires a valid key, both endpoint IDs, a type, a source, and a nonnegative finite weight.")
 	}
+	if c := r.Confidence; c != nil && (math.IsNaN(*c) || *c < 0 || *c > 1) {
+		return NewError("INVALID_REQUEST", "Link confidence must be a finite number between 0 and 1.")
+	}
 	return nil
 }
 
@@ -204,6 +224,15 @@ func (r QueryRequest) Validate() error {
 	}
 	if r.Limit < 0 || r.Limit > MaxQueryLimit {
 		return NewError("INVALID_REQUEST", "Query limit must be between 1 and 100.")
+	}
+	if (r.MaxDepth != nil || r.MaxNeighbors != nil) && (r.ID != "" || r.Mode == "text") {
+		return NewError("INVALID_REQUEST", "Traversal limits require a hybrid or associative text query.")
+	}
+	if depth := r.MaxDepth; depth != nil && (*depth < 1 || *depth > MaxGraphDepth) {
+		return NewError("INVALID_REQUEST", "Maximum traversal depth must be between 1 and 3.")
+	}
+	if neighbors := r.MaxNeighbors; neighbors != nil && (*neighbors < 1 || *neighbors > MaxGraphNeighbors) {
+		return NewError("INVALID_REQUEST", "Maximum neighbors per node must be between 1 and 10.")
 	}
 	return nil
 }

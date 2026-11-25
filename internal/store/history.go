@@ -78,7 +78,8 @@ func (s *Store) visibleEdges(r protocol.HistoryRequest, activeOnly bool) ([]prot
 WHERE (seed.scope=$scope OR seed.scope=$extraScope) AND (edge.scope=$scope OR edge.scope=$extraScope)
   AND (neighbor.scope=$scope OR neighbor.scope=$extraScope)`+filter+`
 RETURN neighbor.id, neighbor.scope, neighbor.memory_type, neighbor.status, neighbor.source,
-       edge.id, edge.scope, edge.kind, edge.source, edge.weight`+end, params)
+       edge.id, edge.scope, edge.kind, edge.source, edge.weight,
+       edge.confidence, edge.activation_count, coalesce(edge.last_activated_at, ''), coalesce(edge.created_at, '')`+end, params)
 		if err != nil {
 			return nil, err
 		}
@@ -91,9 +92,13 @@ RETURN neighbor.id, neighbor.scope, neighbor.memory_type, neighbor.status, neigh
 				}
 				field[i] = value
 			}
-			weight, ok := row[9].(float64)
-			if !ok {
-				return nil, errors.New("invalid relationship weight")
+			weight, okWeight := row[9].(float64)
+			confidence, okConfidence := nullableNumber[float64](row[10])
+			activations, okActivations := nullableNumber[int64](row[11])
+			lastAt, okLastAt := row[12].(string)
+			createdAt, okCreatedAt := row[13].(string)
+			if !okWeight || !okConfidence || !okActivations || !okLastAt || !okCreatedAt {
+				return nil, errors.New("invalid relationship attributes")
 			}
 			from, to := r.ID, field[0]
 			if walk.direction == "reverse" {
@@ -105,9 +110,21 @@ RETURN neighbor.id, neighbor.scope, neighbor.memory_type, neighbor.status, neigh
 			}
 			edges = append(edges, protocol.RelatedMemory{
 				ID: field[0], Scope: field[1], Type: field[2], Status: field[3], Source: field[4],
-				Path: protocol.Path{RelationshipID: field[5], Scope: field[6], Kind: field[7], Source: field[8], Weight: weight, FromID: from, ToID: to, Direction: walk.direction},
+				Path: protocol.Path{
+					RelationshipID: field[5], Scope: field[6], Kind: field[7], Source: field[8],
+					FromID: from, ToID: to, Direction: walk.direction, Weight: weight, Confidence: confidence,
+					ActivationCount: activations, LastActivatedAt: lastAt, CreatedAt: createdAt,
+				},
 			})
 		}
 	}
 	return edges, nil
+}
+
+func nullableNumber[T float64 | int64](value any) (*T, bool) {
+	if value == nil {
+		return nil, true
+	}
+	number, ok := value.(T)
+	return &number, ok
 }

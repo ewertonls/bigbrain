@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -67,8 +68,27 @@ func TestCommandHelp(t *testing.T) {
 			}
 		}
 		if !strings.HasPrefix(help, "Usage: bigbrain query ") || !strings.Contains(help, "-limit int") ||
-			!strings.Contains(help, "(default 10)") || strings.Contains(help, "-weight") {
+			!strings.Contains(help, "(default 10)") || !strings.Contains(help, "-max-depth") ||
+			!strings.Contains(help, "-max-neighbors") || strings.Contains(help, "-weight") {
 			t.Fatalf("%v printed unexpected query help:\n%s", args, help)
+		}
+	}
+}
+
+func TestLinkConfidenceFlag(t *testing.T) {
+	for input, want := range map[string]*float64{"": nil, "0": new(0.0), "0.25": new(0.25)} {
+		var request protocol.LinkRequest
+		flags := newFlags("link")
+		linkFlags(flags, &request)
+		args := []string{"--weight", "2"}
+		if input != "" {
+			args = append(args, "--confidence", input)
+		}
+		if err := flags.Parse(args); err != nil {
+			t.Fatal(err)
+		}
+		if request.Weight != 2 || !reflect.DeepEqual(request.Confidence, want) {
+			t.Fatalf("parsing %v produced %+v", args, request)
 		}
 	}
 }
@@ -83,6 +103,8 @@ func TestJSONOutputWithHelpAndInvalidFlags(t *testing.T) {
 		{"help command", []string{"help", "--json"}, true, ""},
 		{"help flag", []string{"status", "--help", "--json"}, true, ""},
 		{"JSON after invalid value", []string{"query", "--limit", "many", "--json=T"}, true, "INVALID_REQUEST"},
+		{"graph depth on lookup", []string{"query", "--global", "--id", "a", "--max-depth", "1", "--json"}, true, "INVALID_REQUEST"},
+		{"graph neighbors on text mode", []string{"query", "--global", "--text", "a", "--mode", "text", "--max-neighbors", "1", "--json"}, true, "INVALID_REQUEST"},
 		{"explicitly disabled", []string{"--json", "query", "--limit", "many", "--json=false"}, false, ""},
 		{"flag value is text", []string{"record", "--unknown", "--text", "--json"}, false, ""},
 	}

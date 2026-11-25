@@ -46,10 +46,9 @@ func (s *Store) queryVector(text string, indexes collection) ([]float32, string)
 	return vector, ""
 }
 
-// The graph gets one vote per target from its strongest visible path. Freeze
-// the seed ranking before traversal so new neighbors cannot propagate again.
+// Seed scores are frozen before adding a single graph contribution per target.
 func (s *Store) hybrid(request protocol.QueryRequest, indexes collection, lexical []protocol.Match, vector []float32, limit int) ([]protocol.Match, error) {
-	pool := max(limit, neighborsPerMatch)
+	pool := max(limit, protocol.DefaultMaxNeighbors)
 	byID := make(map[string]protocol.Match, len(lexical))
 	for _, m := range lexical {
 		m.Reason.Score = m.Reason.BM25 / (1 + m.Reason.BM25)
@@ -70,36 +69,21 @@ func (s *Store) hybrid(request protocol.QueryRequest, indexes collection, lexica
 		byID[m.ID] = m
 	}
 	seeds := rankedMatches(byID)
-	for _, seed := range seeds[:min(pool, len(seeds))] {
-		neighbors, err := s.neighbors(request, seed.Memory, indexes)
-		if err != nil {
-			return nil, err
-		}
-		for _, neighbor := range neighbors {
-			path := neighbor.Reason.Path
-			contribution := seed.Reason.Score * 0.8 * (path.Weight / (1 + path.Weight))
-			if contribution <= 0 {
-				continue
-			}
-			m, exists := byID[neighbor.ID]
-			if !exists {
-				m = neighbor
-			}
-			if m.Reason.GraphScore > contribution ||
-				m.Reason.GraphScore == contribution && m.Reason.Path.RelationshipID <= path.RelationshipID {
-				continue
-			}
-			m.Reason.Path = path
-			m.Reason.GraphScore = contribution
-			if m.Reason.Kind != "relationship" {
-				m.Reason.Kind = "hybrid"
-			}
-			byID[neighbor.ID] = m
-		}
+	hits, err := s.propagate(request, indexes, seeds[:min(pool, len(seeds))], true)
+	if err != nil {
+		return nil, err
 	}
-	for id, m := range byID {
-		m.Reason.Score += m.Reason.GraphScore
-		byID[id] = m
+	for id, hit := range hits {
+		match, direct := byID[id]
+		if direct {
+			match.Reason.Kind = "hybrid"
+		} else {
+			match.Memory = hit.memory.Memory
+			match.Reason.Kind = "relationship"
+		}
+		hit.explain(&match.Reason)
+		match.Reason.Score += hit.score
+		byID[id] = match
 	}
 	return rankedMatches(byID), nil
 }

@@ -88,19 +88,28 @@ func (s *Store) Link(request protocol.LinkRequest) (protocol.WriteResult, error)
 	if err := request.Validate(); err != nil {
 		return protocol.WriteResult{}, err
 	}
-	// Negative zero represents the same weight as positive zero.
+	// Signed zeros represent the same value in a write receipt.
 	if request.Weight == 0 {
 		request.Weight = 0
 	}
+	if request.Confidence != nil && *request.Confidence == 0 {
+		request.Confidence = new(float64)
+	}
 	return s.write("link", request.Scope, request.Key, "", request, func(id string) error {
+		var confidence any
+		if request.Confidence != nil {
+			confidence = *request.Confidence
+		}
 		rows, err := s.query(`
 MATCH (a:Memory {id: $from}), (b:Memory {id: $to})
 WHERE (a.scope = $scope OR a.scope = 'global') AND (b.scope = $scope OR b.scope = 'global')
   AND (a.scope = $scope OR b.scope = $scope) AND a.status = 'active' AND b.status = 'active'
-CREATE (a)-[:Evidence {id: $id, scope: $scope, kind: $kind, weight: $weight, source: $source}]->(b)
+CREATE (a)-[:Evidence {id: $id, scope: $scope, kind: $kind, weight: $weight, source: $source,
+                       confidence: $confidence, activation_count: 0, created_at: $createdAt}]->(b)
 RETURN a.id;`, map[string]any{
 			"from": request.FromID, "to": request.ToID, "scope": request.Scope, "id": id,
 			"kind": request.Kind, "weight": request.Weight, "source": request.Source,
+			"confidence": confidence, "createdAt": time.Now().UTC().Format(time.RFC3339Nano),
 		})
 		if err != nil {
 			return err

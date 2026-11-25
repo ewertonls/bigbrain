@@ -171,10 +171,14 @@ func TestMemoryLifecycleSurvivesRestartAndImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Reproduce a v4 write following a restore. LadybugDB's exported schema
-	// omits the column defaults used by that version of BigBrain.
+	// Recreate the v4 schema in the imported copy. Its exported columns
+	// lack defaults, so the old writer could create a memory with no status.
 	for _, statement := range []string{
 		"IMPORT DATABASE " + quoted + ";",
+		"ALTER TABLE Evidence DROP confidence;",
+		"ALTER TABLE Evidence DROP activation_count;",
+		"ALTER TABLE Evidence DROP last_activated_at;",
+		"ALTER TABLE Evidence DROP created_at;",
 		"MATCH (s:BigBrainSchema {name:'foundation'}) SET s.version='4';",
 		"CREATE (:Memory {id:'old-import',scope:'project:A',text:'Older write',source:'Old session',recorded_at:'then',memory_type:'decision'});",
 	} {

@@ -36,6 +36,13 @@ var migrations = [][]string{
 		"MATCH (m:Memory) WHERE m.status IS NULL SET m.status = 'active';",
 		"MATCH (r:Receipt) WHERE r.deleted IS NULL SET r.deleted = false;",
 	},
+	{
+		// Older links have no recorded values for these attributes.
+		"ALTER TABLE Evidence ADD confidence DOUBLE;",
+		"ALTER TABLE Evidence ADD activation_count INT64;",
+		"ALTER TABLE Evidence ADD last_activated_at STRING;",
+		"ALTER TABLE Evidence ADD created_at STRING;",
+	},
 }
 
 func (s *Store) openSchema() error {
@@ -86,7 +93,7 @@ func (s *Store) checkSchema() error {
 	for _, statement := range []string{
 		"MATCH (m:Memory) RETURN m.id, m.scope, m.text, m.source, m.recorded_at, m.memory_type, m.status, m.invalid_reason, m.invalid_source, m.invalid_at LIMIT 0;",
 		"MATCH (r:Receipt) RETURN r.key, r.operation, r.scope, r.fingerprint, r.result_id, r.deleted LIMIT 0;",
-		"MATCH (:Memory)-[r:Evidence]->(:Memory) RETURN r.id, r.kind, r.weight, r.source, r.scope LIMIT 0;",
+		"MATCH (:Memory)-[r:Evidence]->(:Memory) RETURN r.id, r.kind, r.weight, r.source, r.scope, r.confidence, r.activation_count, r.last_activated_at, r.created_at LIMIT 0;",
 	} {
 		if _, err := s.query(statement, nil); err != nil {
 			return protocol.NewError("DATABASE_INCOMPATIBLE", "The database is missing part of the BigBrain schema: "+err.Error())
