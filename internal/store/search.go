@@ -17,10 +17,11 @@ type indexedMemory struct {
 }
 
 type scopeIndex struct {
-	docs        map[string]*indexedMemory
-	postings    map[string]map[string]int
-	totalLength int
-	hasVectors  bool
+	docs           map[string]*indexedMemory
+	postings       map[string]map[string]int
+	totalLength    int
+	vectorsIndexed bool
+	embeddedDocs   int
 }
 
 // A request searches one scope or the union of a project and global.
@@ -127,16 +128,21 @@ func (c collection) textMatches(text string) []protocol.Match {
 	return matches
 }
 
-func (c collection) indexVectors(model *embeddings) {
+func (c collection) indexVectors(model *embeddings) bool {
+	count := 0
 	for _, idx := range c {
-		if idx.hasVectors {
-			continue
+		if !idx.vectorsIndexed {
+			for _, doc := range idx.docs {
+				doc.vector = model.encode(doc.Text)
+				if len(doc.vector) != 0 {
+					idx.embeddedDocs++
+				}
+			}
+			idx.vectorsIndexed = true
 		}
-		for _, doc := range idx.docs {
-			doc.vector = model.encode(doc.Text)
-		}
-		idx.hasVectors = true
+		count += idx.embeddedDocs
 	}
+	return count > 0
 }
 
 // All indexed vectors have unit length. Scan only visible scopes, then take k.

@@ -202,7 +202,7 @@ func execute(args []string, options *options) (any, error) {
 		var request protocol.QueryRequest
 		flags.StringVar(&request.Text, "text", "", "search text (use either -text or -id)")
 		flags.StringVar(&request.ID, "id", "", "memory ID")
-		flags.StringVar(&request.Mode, "mode", "associative", "retrieval mode: text or associative")
+		flags.StringVar(&request.Mode, "mode", "hybrid", "retrieval mode: hybrid, text or associative")
 		flags.IntVar(&request.Limit, "limit", protocol.DefaultQueryLimit, "maximum results")
 		flags.BoolVar(&request.IncludeGlobal, "include-global", false, "include global records")
 		return dataCommand[protocol.QueryResult](flags, args, &scope, options, &request.Scope, &request)

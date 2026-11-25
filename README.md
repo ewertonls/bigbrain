@@ -103,12 +103,41 @@ link a project memory to a global memory in either direction. The project
 owns the relationship. Both endpoints and the relationship must be visible
 for a query to return its path, source or ranking contribution.
 
-Use `--mode text` for the text-only control and `--id ID` for an exact lookup
-within the selected scope. By default, search uses associative mode and returns
-up to ten results. Text matching uses case-insensitive words. Each text match
-can contribute up to five distinct neighbors. An indirect result includes the
-stored relationship, the direction traveled, and the relationship source.
-`count` is the number of unique matches before the result limit.
+Use `--id ID` for an exact lookup. The CLI defaults to hybrid retrieval
+with a limit of ten. The Foundation controls remain available as `--mode
+text` and `--mode associative`. The latter follows up to five distinct
+neighbors per text match. A v1 request that omits `mode` keeps the
+Foundation associative behavior.
+
+## Offline hybrid search
+
+Configure the daemon with a local word2vec text vocabulary. The file begins
+with the word count and dimension, followed by one word and its vector per
+line. Plain text and gzip are supported. The evaluation used Stanford GloVe
+Wiki/Gigaword, 400,000 words and 50 dimensions. Download it once during
+setup. The daemon reads the local file when it first receives a hybrid query.
+
+```sh
+mkdir -p build/models
+curl -fL -o build/models/glove-50.gz https://github.com/piskvorky/gensim-data/releases/download/glove-wiki-gigaword-50/glove-wiki-gigaword-50.gz
+echo '5c55f98957aa9fed8d2ac5fb1dcff57af3b23c5a3ee7af3f7945f8d49198eb24  build/models/glove-50.gz' | sha256sum -c -
+export BIGBRAIN_EMBEDDINGS="$PWD/build/models/glove-50.gz"
+bigbrain shutdown
+bigbrain --json query --current-project --mode hybrid --text 'shipping binaries' --limit 3
+```
+
+The result includes the memory source and a `reason` with the contributing
+BM25 terms and score, cosine similarity, or strongest visible one-hop path.
+A path identifies its stored direction, traversal direction, owner, weight
+and source. The final score combines normalized BM25, cosine and the best
+weighted graph contribution. Ties break by memory ID. The `count` includes
+the unique candidates before the output limit.
+
+If the model is missing, unreadable, or has no usable embedding, hybrid
+returns the text-plus-graph results and a machine-readable `fallback` reason.
+Start the daemon with `BIGBRAIN_VECTOR_INDEX=off` to disable the vector
+index. Restart it after changing its environment or vocabulary. All searches
+run locally. [GloVe model and license](https://nlp.stanford.edu/projects/glove/)
 
 ## Integration and retries
 
