@@ -171,15 +171,30 @@ func TestMemoryLifecycleSurvivesRestartAndImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := conn.Query("IMPORT DATABASE " + quoted + ";")
-	if err != nil {
-		t.Fatal(err)
+	// Reproduce a v4 write following a restore. LadybugDB's exported schema
+	// omits the column defaults used by that version of BigBrain.
+	for _, statement := range []string{
+		"IMPORT DATABASE " + quoted + ";",
+		"MATCH (s:BigBrainSchema {name:'foundation'}) SET s.version='4';",
+		"CREATE (:Memory {id:'old-import',scope:'project:A',text:'Older write',source:'Old session',recorded_at:'then',memory_type:'decision'});",
+	} {
+		result, err := conn.Query(statement)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result.Close()
 	}
-	result.Close()
 	conn.Close()
 	raw.Close()
 	db = openTestStore(t, restored)
 	checkDeletion()
+	if got := h("project:A", "old-import", false); got.Status != "active" {
+		t.Fatalf("restored v4 memory: %+v", got)
+	}
+	fresh := recordForTest(t, db, record("after-import", "project:A", "New write", "decision"))
+	if got := h("project:A", fresh.ID, false); got.Status != "active" {
+		t.Fatalf("new memory after import: %+v", got)
+	}
 	_, err = db.Delete(protocol.MemoryWriteRequest{Key: "remove-global", Scope: "global", ID: g.ID})
 	if err != nil {
 		t.Fatal(err)
@@ -189,5 +204,4 @@ func TestMemoryLifecycleSurvivesRestartAndImport(t *testing.T) {
 	if got := h("project:B", b.ID, true); got.Status != "active" || len(got.Related) != 0 {
 		t.Fatalf("global deletion changed the project memory: %+v", got)
 	}
-
 }

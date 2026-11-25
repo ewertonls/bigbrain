@@ -51,7 +51,7 @@ func (s *Store) visibleIndexes(request protocol.QueryRequest) (collection, error
 }
 
 func words(text string) []string {
-	return strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+	return strings.FieldsFunc(text, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
 	})
 }
@@ -59,7 +59,7 @@ func words(text string) []string {
 func buildIndex(memories []protocol.Memory) *scopeIndex {
 	idx := &scopeIndex{docs: make(map[string]*indexedMemory, len(memories)), postings: make(map[string]map[string]int)}
 	for _, m := range memories {
-		tokens := words(m.Text)
+		tokens := words(strings.ToLower(m.Text))
 		idx.docs[m.ID] = &indexedMemory{Memory: m, length: len(tokens)}
 		idx.totalLength += len(tokens)
 		for _, term := range tokens {
@@ -93,7 +93,7 @@ func (c collection) textMatches(text string) []protocol.Match {
 		return matches
 	}
 	avgLength := float64(totalLength) / float64(documents)
-	terms := words(text)
+	terms := words(strings.ToLower(text))
 	slices.Sort(terms)
 	positions := make(map[string]int)
 	for _, term := range slices.Compact(terms) {
@@ -145,12 +145,13 @@ func (c collection) indexVectors(model *embeddings) bool {
 	return count > 0
 }
 
-// All indexed vectors have unit length. Scan only visible scopes, then take k.
+// All indexed vectors have unit length. Keep the best k while scanning visible scopes.
 func (c collection) nearest(query []float32, k int) []protocol.Match {
-	var matches []protocol.Match
-	if len(query) == 0 {
-		return matches
+	if len(query) == 0 || k <= 0 {
+		return nil
 	}
+	// One spare slot lets an insertion displace the previous last match.
+	matches := make([]protocol.Match, 0, k+1)
 	for _, idx := range c {
 		for _, doc := range idx.docs {
 			if len(doc.vector) == 0 {
@@ -160,14 +161,24 @@ func (c collection) nearest(query []float32, k int) []protocol.Match {
 			for i, v := range query {
 				dot += float64(v) * float64(doc.vector[i])
 			}
-			matches = append(matches, protocol.Match{Memory: doc.Memory, Reason: protocol.Reason{Kind: "vector", Cosine: max(-1, min(1, dot))}})
+			cosine := max(-1, min(1, dot))
+			if len(matches) == k && cosine < matches[k-1].Reason.Cosine {
+				continue
+			}
+			match := protocol.Match{Memory: doc.Memory, Reason: protocol.Reason{Kind: "vector", Cosine: cosine}}
+			pos, _ := slices.BinarySearchFunc(matches, match, compareVectorMatches)
+			if pos < k {
+				matches = slices.Insert(matches, pos, match)
+				matches = matches[:min(k, len(matches))]
+			}
 		}
 	}
-	slices.SortFunc(matches, func(a, b protocol.Match) int {
-		if order := cmp.Compare(b.Reason.Cosine, a.Reason.Cosine); order != 0 {
-			return order
-		}
-		return cmp.Compare(a.ID, b.ID)
-	})
-	return matches[:min(k, len(matches))]
+	return matches
+}
+
+func compareVectorMatches(a, b protocol.Match) int {
+	if order := cmp.Compare(b.Reason.Cosine, a.Reason.Cosine); order != 0 {
+		return order
+	}
+	return cmp.Compare(a.ID, b.ID)
 }

@@ -76,7 +76,7 @@ func (s *Store) Record(request protocol.RecordRequest) (protocol.WriteResult, er
 		if memoryType == "" {
 			memoryType = "unknown"
 		}
-		_, err := s.query(`CREATE (:Memory {id: $id, scope: $scope, text: $text, source: $source, recorded_at: $recordedAt, memory_type: $type});`, map[string]any{
+		_, err := s.query(`CREATE (:Memory {id: $id, scope: $scope, text: $text, source: $source, recorded_at: $recordedAt, memory_type: $type, status: 'active'});`, map[string]any{
 			"id": id, "scope": request.Scope, "text": request.Text, "source": request.Source,
 			"recordedAt": time.Now().UTC().Format(time.RFC3339Nano), "type": memoryType,
 		})
@@ -153,7 +153,7 @@ func (s *Store) write(operation, scope, key, targetID string, request any, mutat
 		return protocol.WriteResult{}, err
 	}
 	if _, err := s.query(`
-CREATE (:Receipt {key: $key, operation: $operation, scope: $scope, fingerprint: $fingerprint, result_id: $id});`, map[string]any{
+CREATE (:Receipt {key: $key, operation: $operation, scope: $scope, fingerprint: $fingerprint, result_id: $id, deleted: false});`, map[string]any{
 		"key": key, "operation": operation, "scope": scope, "fingerprint": fingerprint, "id": result.ID,
 	}); err != nil {
 		return protocol.WriteResult{}, err

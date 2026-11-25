@@ -79,11 +79,16 @@ func loadEmbeddings(path string) (*embeddings, error) {
 func (m *embeddings) encode(text string) []float32 {
 	sum := make([]float64, m.dim)
 	for _, term := range words(text) {
-		switch term {
+		lower := strings.ToLower(term)
+		switch lower {
 		case "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is", "it", "of", "on", "or", "that", "the", "to", "was", "with":
 			continue
 		}
-		for i, v := range m.words[term] {
+		vector := m.words[term]
+		if vector == nil && term != lower {
+			vector = m.words[lower]
+		}
+		for i, v := range vector {
 			sum[i] += float64(v)
 		}
 	}

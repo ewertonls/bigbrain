@@ -60,6 +60,19 @@ func TestVisibleBM25AndExactNeighbors(t *testing.T) {
 	}
 }
 
+func TestNearestBreaksTiesAcrossScopes(t *testing.T) {
+	indexes := collection{
+		buildIndex([]protocol.Memory{{ID: "z", Text: "car"}}),
+		buildIndex([]protocol.Memory{{ID: "a", Text: "car"}}),
+	}
+	model := &embeddings{dim: 1, words: map[string][]float32{"car": {1}}}
+	indexes.indexVectors(model)
+	got := indexes.nearest(model.encode("car"), 1)
+	if len(got) != 1 || got[0].ID != "a" {
+		t.Fatalf("nearest = %+v, want a", got)
+	}
+}
+
 func TestLoadEmbeddingVocabulary(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "vectors.txt")
 	for _, data := range []string{"2 2\nword 0 1\n", "1 2\nword NaN 1\n", "2 1\nword 1\nword 2\n"} {
@@ -70,7 +83,7 @@ func TestLoadEmbeddingVocabulary(t *testing.T) {
 			t.Fatalf("accepted malformed vectors %q", data)
 		}
 	}
-	if err := os.WriteFile(path, []byte("2 2\ncar 1 0\nvehicle 1 0\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("5 2\ncar 1 0\nvehicle 1 0\nLondon 0 1\nUS -1 0\nus 0 -1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	model, err := loadEmbeddings(path)
@@ -79,6 +92,11 @@ func TestLoadEmbeddingVocabulary(t *testing.T) {
 	}
 	if !reflect.DeepEqual(model.encode("the vehicle"), model.encode("car")) || model.encode("absent") != nil {
 		t.Fatal("unexpected sentence embeddings")
+	}
+	for word, want := range map[string][]float32{"London": {0, 1}, "US": {-1, 0}, "us": {0, -1}, "Car": {1, 0}} {
+		if got := model.encode(word); !reflect.DeepEqual(got, want) {
+			t.Errorf("encode(%q) = %v, want %v", word, got, want)
+		}
 	}
 }
 

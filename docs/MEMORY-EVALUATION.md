@@ -64,8 +64,8 @@ The exact-search check used vectors with independently calculated cosines of
 1, 0.6 and −1. Twelve closer private records left the ordered results and
 BM25 scores unchanged in both the second project and its union with global.
 A memory write evicts its scope's derived index after commit. The next search builds
-it from the database. Index memory grows with the scopes searched, and vector
-search scans and sorts the visible scores.
+it from the database. Index memory grows with the scopes searched. Vector
+search scans every visible embedding and keeps only the top candidates.
 
 On Linux amd64 with the 50-dimensional GloVe Wiki/Gigaword model, building
 text postings for the 14 visible fixture memories took 31.6 µs. Generating
