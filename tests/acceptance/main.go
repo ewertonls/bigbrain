@@ -311,13 +311,17 @@ func main() {
 			panic(failure)
 		}
 	}()
-	require(len(os.Args) == 3, "usage: acceptance PACKAGED_BIGBRAIN FAULT_TEST_BIGBRAIN")
 	var err error
 	root, err = os.MkdirTemp("", "foundation-test-")
 	check(err)
 	production := func(name string) cli {
 		return cli{bin: os.Args[1], db: filepath.Join(root, name)}
 	}
+	if len(os.Args) == 4 && os.Args[1] == "--memory" {
+		runMemoryEvaluation(cli{bin: os.Args[2], db: filepath.Join(root, "memory")}, os.Args[3])
+		return
+	}
+	require(len(os.Args) == 3, "usage: acceptance BIGBRAIN FAULT_TEST_BIGBRAIN or acceptance --memory BIGBRAIN FIXTURE")
 	orbit := production("orbit")
 	require(!status(orbit).Running, "new database reported a running daemon")
 	help := exec.Command(orbit.bin, "--db", orbit.db, "help")

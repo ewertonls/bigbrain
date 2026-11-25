@@ -2,7 +2,9 @@
 
 BigBrain stores local memories and the relationships that connect them. A
 later session can find a decision and follow it to the original evidence.
-Foundation runs offline on Debian 12 ARM64 with LadybugDB 0.17.0.
+The Memory release adds typed records, local hybrid search and scoped history
+on LadybugDB 0.17.0. Stop a running Foundation daemon before starting the
+new binary so it can migrate the database.
 
 ## Local development
 
@@ -183,5 +185,5 @@ and `instance_id`. They send JSON to `POST /v1/record`, `/v1/link`,
 `/v1/query`, `/v1/history`, `/v1/invalidate` or `/v1/delete` with `X-BigBrain-Version: 1` and `X-BigBrain-Instance` set to the
 verified instance ID. Request scopes use `project:ID` or `global`.
 
-See the [Foundation specification](docs/SPEC.md) and
-[retrieval evaluation](docs/FOUNDATION-EVALUATION.md) for acceptance criteria.
+The retrieval evaluations report source hits, irrelevant results and measured
+costs. [Memory evaluation](docs/MEMORY-EVALUATION.md) · [Foundation evaluation](docs/FOUNDATION-EVALUATION.md) · [Foundation specification](docs/SPEC.md)
