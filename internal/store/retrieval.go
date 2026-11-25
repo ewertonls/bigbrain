@@ -28,7 +28,7 @@ func (s *Store) Query(request protocol.QueryRequest) (protocol.QueryResult, erro
 	} else {
 		matches = textMatches(memories, request.Text)
 		if request.Mode != "text" && len(matches) != 0 {
-			indirect, err := s.associations(matches, memories)
+			indirect, err := s.associations(request, matches, memories)
 			if err != nil {
 				return protocol.QueryResult{}, err
 			}
@@ -43,12 +43,8 @@ func (s *Store) Query(request protocol.QueryRequest) (protocol.QueryResult, erro
 }
 
 func (s *Store) visibleMemories(request protocol.QueryRequest) ([]protocol.Memory, error) {
-	extraScope := request.Scope
-	if request.IncludeGlobal {
-		extraScope = "global"
-	}
+	parameters := scopeParameters(request)
 	statement := "MATCH (m:Memory) WHERE (m.scope = $scope OR m.scope = $extraScope)"
-	parameters := map[string]any{"scope": request.Scope, "extraScope": extraScope}
 	if request.ID != "" {
 		statement += " AND m.id = $id"
 		parameters["id"] = request.ID
@@ -72,6 +68,14 @@ func (s *Store) visibleMemories(request protocol.QueryRequest) ([]protocol.Memor
 		})
 	}
 	return memories, nil
+}
+
+func scopeParameters(request protocol.QueryRequest) map[string]any {
+	extraScope := request.Scope
+	if request.IncludeGlobal {
+		extraScope = "global"
+	}
+	return map[string]any{"scope": request.Scope, "extraScope": extraScope}
 }
 
 func words(text string) []string {
@@ -112,7 +116,7 @@ func textMatches(memories []protocol.Memory, text string) []protocol.Match {
 	return matches
 }
 
-func (s *Store) associations(seeds []protocol.Match, memories []protocol.Memory) ([]protocol.Match, error) {
+func (s *Store) associations(request protocol.QueryRequest, seeds []protocol.Match, memories []protocol.Memory) ([]protocol.Match, error) {
 	visible := make(map[string]protocol.Memory, len(memories))
 	for _, memory := range memories {
 		visible[memory.ID] = memory
@@ -123,7 +127,7 @@ func (s *Store) associations(seeds []protocol.Match, memories []protocol.Memory)
 	}
 	bestByID := make(map[string]protocol.Match)
 	for _, seed := range seeds {
-		neighbors, err := s.neighbors(seed.Memory, visible)
+		neighbors, err := s.neighbors(request, seed.Memory, visible)
 		if err != nil {
 			return nil, err
 		}
@@ -136,8 +140,10 @@ func (s *Store) associations(seeds []protocol.Match, memories []protocol.Memory)
 	return sortedNeighbors(bestByID), nil
 }
 
-func (s *Store) neighbors(seed protocol.Memory, visible map[string]protocol.Memory) ([]protocol.Match, error) {
+func (s *Store) neighbors(request protocol.QueryRequest, seed protocol.Memory, visible map[string]protocol.Memory) ([]protocol.Match, error) {
 	bestByID := make(map[string]protocol.Match)
+	parameters := scopeParameters(request)
+	parameters["id"] = seed.ID
 	for _, traversal := range []struct {
 		relation  string
 		direction string
@@ -147,9 +153,10 @@ func (s *Store) neighbors(seed protocol.Memory, visible map[string]protocol.Memo
 	} {
 		rows, err := s.query(`
 MATCH (seed:Memory {id: $id})`+traversal.relation+`(neighbor:Memory)
-WHERE seed.scope = $scope AND neighbor.scope = $scope
-RETURN neighbor.id, edge.id, edge.kind, edge.source, edge.weight;`,
-			map[string]any{"id": seed.ID, "scope": seed.Scope})
+WHERE (seed.scope = $scope OR seed.scope = $extraScope)
+  AND (edge.scope = $scope OR edge.scope = $extraScope)
+  AND (neighbor.scope = $scope OR neighbor.scope = $extraScope)
+RETURN neighbor.id, edge.id, edge.kind, edge.source, edge.weight, edge.scope;`, parameters)
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +166,8 @@ RETURN neighbor.id, edge.id, edge.kind, edge.source, edge.weight;`,
 			kind, kindOK := row[2].(string)
 			source, sourceOK := row[3].(string)
 			weight, weightOK := row[4].(float64)
-			if !idOK || !relOK || !kindOK || !sourceOK || !weightOK {
+			owner, scopeOK := row[5].(string)
+			if !scopeOK || !idOK || !relOK || !kindOK || !sourceOK || !weightOK {
 				return nil, errors.New("Invalid relationship in the database.")
 			}
 			neighbor, ok := visible[neighborID]
@@ -173,7 +181,7 @@ RETURN neighbor.id, edge.id, edge.kind, edge.source, edge.weight;`,
 			keepBest(bestByID, protocol.Match{Memory: neighbor, Reason: protocol.Reason{
 				Kind: "relationship",
 				Path: &protocol.Path{
-					RelationshipID: relID, FromID: fromID, ToID: toID, Kind: kind, Source: source,
+					Scope: owner, RelationshipID: relID, FromID: fromID, ToID: toID, Kind: kind, Source: source,
 					Direction: traversal.direction, Weight: weight,
 				},
 			}})

@@ -92,8 +92,9 @@ func (s *Store) Link(request protocol.LinkRequest) (protocol.WriteResult, error)
 	return s.write("link", request.Scope, request.Key, request, func(id string) error {
 		rows, err := s.query(`
 MATCH (a:Memory {id: $from}), (b:Memory {id: $to})
-WHERE a.scope = $scope AND b.scope = $scope
-CREATE (a)-[:Evidence {id: $id, kind: $kind, weight: $weight, source: $source}]->(b)
+WHERE (a.scope = $scope OR a.scope = 'global') AND (b.scope = $scope OR b.scope = 'global')
+  AND (a.scope = $scope OR b.scope = $scope)
+CREATE (a)-[:Evidence {id: $id, scope: $scope, kind: $kind, weight: $weight, source: $source}]->(b)
 RETURN a.id;`, map[string]any{
 			"from": request.FromID, "to": request.ToID, "scope": request.Scope, "id": id,
 			"kind": request.Kind, "weight": request.Weight, "source": request.Source,
@@ -102,7 +103,7 @@ RETURN a.id;`, map[string]any{
 			return err
 		}
 		if len(rows) == 0 {
-			return protocol.NewError("NOT_FOUND", "Both memories must exist in the selected scope.")
+			return protocol.NewError("NOT_FOUND", "The selected scope cannot link these endpoints.")
 		}
 		return nil
 	})

@@ -19,6 +19,10 @@ var migrations = [][]string{
 	{
 		"ALTER TABLE Memory ADD memory_type STRING DEFAULT 'unknown';",
 	},
+	{
+		"ALTER TABLE Evidence ADD scope STRING;",
+		"MATCH (a:Memory)-[e:Evidence]->(:Memory) SET e.scope = a.scope;",
+	},
 }
 
 func (s *Store) openSchema() error {
@@ -69,7 +73,7 @@ func (s *Store) checkSchema() error {
 	for _, statement := range []string{
 		"MATCH (m:Memory) RETURN m.id, m.scope, m.text, m.source, m.recorded_at, m.memory_type LIMIT 0;",
 		"MATCH (r:Receipt) RETURN r.key, r.operation, r.scope, r.fingerprint, r.result_id LIMIT 0;",
-		"MATCH (:Memory)-[r:Evidence]->(:Memory) RETURN r.id, r.kind, r.weight, r.source LIMIT 0;",
+		"MATCH (:Memory)-[r:Evidence]->(:Memory) RETURN r.id, r.kind, r.weight, r.source, r.scope LIMIT 0;",
 	} {
 		if _, err := s.query(statement, nil); err != nil {
 			return protocol.NewError("DATABASE_INCOMPATIBLE", "The database is missing part of the BigBrain schema: "+err.Error())

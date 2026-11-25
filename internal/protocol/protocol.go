@@ -122,6 +122,7 @@ type Reason struct {
 }
 
 type Path struct {
+	Scope          string  `json:"scope"`
 	RelationshipID string  `json:"relationship_id"`
 	FromID         string  `json:"from_id"`
 	ToID           string  `json:"to_id"`
