@@ -14,8 +14,6 @@ import (
 	"github.com/ewertonls/bigbrain/internal/protocol"
 )
 
-const schemaVersion = "1"
-
 // Store owns one native connection. The daemon serializes access to it.
 type Store struct {
 	database   *lbug.Database
@@ -61,62 +59,6 @@ func Open(path string) (*Store, error) {
 	return store, nil
 }
 
-func (s *Store) openSchema() error {
-	tables, err := s.query("CALL SHOW_TABLES() RETURN name;", nil)
-	if err != nil {
-		return protocol.NewError("DATABASE_UNAVAILABLE", "Could not read the LadybugDB catalog: "+err.Error())
-	}
-	if len(tables) == 0 {
-		if err := s.createSchema(); err != nil {
-			return protocol.NewError("DATABASE_UNAVAILABLE", "Could not initialize the BigBrain schema: "+err.Error())
-		}
-		return nil
-	}
-	version, err := s.query("MATCH (schema:BigBrainSchema {name: 'foundation'}) RETURN schema.version;", nil)
-	if err != nil || len(version) != 1 || version[0][0] != schemaVersion {
-		return protocol.NewError("DATABASE_INCOMPATIBLE", "The database does not use the BigBrain Foundation schema.")
-	}
-
-	// Binding these column names also detects a partial or damaged catalog.
-	for _, statement := range []string{
-		"MATCH (m:Memory) RETURN m.id, m.scope, m.text, m.source, m.recorded_at LIMIT 0;",
-		"MATCH (r:Receipt) RETURN r.key, r.operation, r.scope, r.fingerprint, r.result_id LIMIT 0;",
-		"MATCH (:Memory)-[r:Evidence]->(:Memory) RETURN r.id, r.kind, r.weight, r.source LIMIT 0;",
-	} {
-		if _, err := s.query(statement, nil); err != nil {
-			return protocol.NewError("DATABASE_INCOMPATIBLE", "The database is missing part of the BigBrain Foundation schema: "+err.Error())
-		}
-	}
-	return nil
-}
-
-func (s *Store) createSchema() error {
-	if _, err := s.query("BEGIN TRANSACTION;", nil); err != nil {
-		return err
-	}
-	committed := false
-	defer s.rollbackUnlessCommitted(&committed)
-
-	for _, statement := range []string{
-		"CREATE NODE TABLE BigBrainSchema(name STRING, version STRING, PRIMARY KEY(name));",
-		"CREATE NODE TABLE Memory(id STRING, scope STRING, text STRING, source STRING, recorded_at STRING, PRIMARY KEY(id));",
-		"CREATE NODE TABLE Receipt(key STRING, operation STRING, scope STRING, fingerprint STRING, result_id STRING, PRIMARY KEY(key));",
-		"CREATE REL TABLE Evidence(FROM Memory TO Memory, id STRING, kind STRING, weight DOUBLE, source STRING);",
-	} {
-		if _, err := s.query(statement, nil); err != nil {
-			return err
-		}
-	}
-	if _, err := s.query("CREATE (:BigBrainSchema {name: 'foundation', version: $version});", map[string]any{"version": schemaVersion}); err != nil {
-		return err
-	}
-	if _, err := s.query("COMMIT;", nil); err != nil {
-		return err
-	}
-	committed = true
-	return nil
-}
-
 func (s *Store) Close() {
 	s.connection.Close()
 	s.database.Close()
@@ -127,9 +69,13 @@ func (s *Store) Record(request protocol.RecordRequest) (protocol.WriteResult, er
 		return protocol.WriteResult{}, err
 	}
 	return s.write("record", request.Scope, request.Key, request, func(id string) error {
-		_, err := s.query(`CREATE (:Memory {id: $id, scope: $scope, text: $text, source: $source, recorded_at: $recordedAt});`, map[string]any{
+		memoryType := request.Type
+		if memoryType == "" {
+			memoryType = "unknown"
+		}
+		_, err := s.query(`CREATE (:Memory {id: $id, scope: $scope, text: $text, source: $source, recorded_at: $recordedAt, memory_type: $type});`, map[string]any{
 			"id": id, "scope": request.Scope, "text": request.Text, "source": request.Source,
-			"recordedAt": time.Now().UTC().Format(time.RFC3339Nano),
+			"recordedAt": time.Now().UTC().Format(time.RFC3339Nano), "type": memoryType,
 		})
 		return err
 	})

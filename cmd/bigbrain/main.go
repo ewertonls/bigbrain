@@ -184,6 +184,7 @@ func execute(args []string, options *options) (any, error) {
 		return locateDatabase(selected, options.db)
 	case "record":
 		var request protocol.RecordRequest
+		flags.StringVar(&request.Type, "type", "", "semantic, episodic, procedural, decision, preference, entity or observation")
 		flags.StringVar(&request.Key, "key", "", "idempotency key (required)")
 		flags.StringVar(&request.Text, "text", "", "memory text (required)")
 		flags.StringVar(&request.Source, "source", "", "memory source (required)")

@@ -69,6 +69,7 @@ type RecordRequest struct {
 	Key    string `json:"key"`
 	Text   string `json:"text"`
 	Source string `json:"source"`
+	Type   string `json:"type,omitempty"`
 }
 
 type LinkRequest struct {
@@ -101,6 +102,7 @@ type QueryResult struct {
 }
 
 type Memory struct {
+	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Scope      string `json:"scope"`
 	Text       string `json:"text"`
@@ -152,6 +154,11 @@ func (r RecordRequest) Validate() error {
 	}
 	if !validText(r.Key, 256) || !validText(r.Text, maxMemoryTextBytes) || !validText(r.Source, maxSourceBytes) {
 		return NewError("INVALID_REQUEST", "Record requires a valid key, text, and source.")
+	}
+	switch r.Type {
+	case "", "semantic", "episodic", "procedural", "decision", "preference", "entity", "observation":
+	default:
+		return NewError("INVALID_REQUEST", "Unknown memory type.")
 	}
 	return nil
 }
