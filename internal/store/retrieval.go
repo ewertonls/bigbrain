@@ -53,13 +53,13 @@ func (s *Store) visibleMemories(request protocol.QueryRequest) ([]protocol.Memor
 		statement += " AND m.id = $id"
 		parameters["id"] = request.ID
 	}
-	rows, err := s.query(statement+" RETURN m.id, m.scope, m.text, m.source, m.recorded_at;", parameters)
+	rows, err := s.query(statement+" RETURN m.id, m.scope, m.text, m.source, m.recorded_at, m.memory_type;", parameters)
 	if err != nil {
 		return nil, err
 	}
 	memories := make([]protocol.Memory, 0, len(rows))
 	for _, row := range rows {
-		var fields [5]string
+		var fields [6]string
 		for index, value := range row {
 			text, ok := value.(string)
 			if !ok {
@@ -68,7 +68,7 @@ func (s *Store) visibleMemories(request protocol.QueryRequest) ([]protocol.Memor
 			fields[index] = text
 		}
 		memories = append(memories, protocol.Memory{
-			ID: fields[0], Scope: fields[1], Text: fields[2], Source: fields[3], RecordedAt: fields[4],
+			ID: fields[0], Scope: fields[1], Text: fields[2], Source: fields[3], RecordedAt: fields[4], Type: fields[5],
 		})
 	}
 	return memories, nil

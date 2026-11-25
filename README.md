@@ -74,9 +74,9 @@ Use `bigbrain help` to list commands. Run `bigbrain query -h` or
 bigbrain project init orbit
 
 bigbrain --json record --current-project --key orbit-decision-12 \
-  --text 'Orbit sends readings in batches.' --source 'Decision 12'
+  --type decision --text 'Orbit sends readings in batches.' --source 'Decision 12'
 bigbrain --json record --current-project --key orbit-test-7 \
-  --text 'The receiver accepts only one request per minute.' --source 'Test 7'
+  --type observation --text 'The receiver accepts only one request per minute.' --source 'Test 7'
 
 # Substitute the two IDs returned by record.
 bigbrain --json link --current-project --key orbit-review-12 \
@@ -86,6 +86,12 @@ bigbrain --json link --current-project --key orbit-review-12 \
 bigbrain shutdown
 bigbrain --json query --current-project --text Orbit --limit 2
 ```
+
+The optional `record --type` accepts `semantic`, `episodic`, `procedural`,
+`decision`, `preference`, `entity`, or `observation`. A query returns
+`type: "unknown"` for an untyped memory. Opening a Foundation database
+migrates it in one transaction and preserves IDs, sources, links and
+previously issued write receipts.
 
 `project init` stores the chosen ID in the Git common directory, so separate
 worktrees share it. Every data command requires a scope. Use
