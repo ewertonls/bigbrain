@@ -4,8 +4,6 @@ import (
 	"cmp"
 	"errors"
 	"slices"
-	"strings"
-	"unicode"
 
 	"github.com/ewertonls/bigbrain/internal/protocol"
 )
@@ -16,19 +14,23 @@ func (s *Store) Query(request protocol.QueryRequest) (protocol.QueryResult, erro
 	if err := request.Validate(); err != nil {
 		return protocol.QueryResult{}, err
 	}
-	memories, err := s.visibleMemories(request)
-	if err != nil {
-		return protocol.QueryResult{}, err
-	}
 	matches := make([]protocol.Match, 0)
 	if request.ID != "" {
+		memories, err := s.visibleMemories(request)
+		if err != nil {
+			return protocol.QueryResult{}, err
+		}
 		if len(memories) != 0 {
 			matches = append(matches, protocol.Match{Memory: memories[0], Reason: protocol.Reason{Kind: "id"}})
 		}
 	} else {
-		matches = textMatches(memories, request.Text)
+		indexes, err := s.visibleIndexes(request)
+		if err != nil {
+			return protocol.QueryResult{}, err
+		}
+		matches = indexes.textMatches(request.Text)
 		if request.Mode != "text" && len(matches) != 0 {
-			indirect, err := s.associations(request, matches, memories)
+			indirect, err := s.associations(request, matches, indexes)
 			if err != nil {
 				return protocol.QueryResult{}, err
 			}
@@ -78,56 +80,14 @@ func scopeParameters(request protocol.QueryRequest) map[string]any {
 	return map[string]any{"scope": request.Scope, "extraScope": extraScope}
 }
 
-func words(text string) []string {
-	return strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
-	})
-}
-
-func textMatches(memories []protocol.Memory, text string) []protocol.Match {
-	terms := words(text)
-	slices.Sort(terms)
-	terms = slices.Compact(terms)
-	matches := make([]protocol.Match, 0)
-	for _, memory := range memories {
-		wordsInMemory := make(map[string]bool)
-		for _, word := range words(memory.Text) {
-			wordsInMemory[word] = true
-		}
-		var found []string
-		for _, term := range terms {
-			if wordsInMemory[term] {
-				found = append(found, term)
-			}
-		}
-		if len(found) > 0 {
-			matches = append(matches, protocol.Match{
-				Memory: memory,
-				Reason: protocol.Reason{Kind: "text", Terms: found},
-			})
-		}
-	}
-	slices.SortFunc(matches, func(a, b protocol.Match) int {
-		if scoreOrder := cmp.Compare(len(b.Reason.Terms), len(a.Reason.Terms)); scoreOrder != 0 {
-			return scoreOrder
-		}
-		return cmp.Compare(a.ID, b.ID)
-	})
-	return matches
-}
-
-func (s *Store) associations(request protocol.QueryRequest, seeds []protocol.Match, memories []protocol.Memory) ([]protocol.Match, error) {
-	visible := make(map[string]protocol.Memory, len(memories))
-	for _, memory := range memories {
-		visible[memory.ID] = memory
-	}
+func (s *Store) associations(request protocol.QueryRequest, seeds []protocol.Match, indexes collection) ([]protocol.Match, error) {
 	direct := make(map[string]bool, len(seeds))
 	for _, seed := range seeds {
 		direct[seed.ID] = true
 	}
 	bestByID := make(map[string]protocol.Match)
 	for _, seed := range seeds {
-		neighbors, err := s.neighbors(request, seed.Memory, visible)
+		neighbors, err := s.neighbors(request, seed.Memory, indexes)
 		if err != nil {
 			return nil, err
 		}
@@ -140,7 +100,7 @@ func (s *Store) associations(request protocol.QueryRequest, seeds []protocol.Mat
 	return sortedNeighbors(bestByID), nil
 }
 
-func (s *Store) neighbors(request protocol.QueryRequest, seed protocol.Memory, visible map[string]protocol.Memory) ([]protocol.Match, error) {
+func (s *Store) neighbors(request protocol.QueryRequest, seed protocol.Memory, indexes collection) ([]protocol.Match, error) {
 	bestByID := make(map[string]protocol.Match)
 	parameters := scopeParameters(request)
 	parameters["id"] = seed.ID
@@ -170,15 +130,15 @@ RETURN neighbor.id, edge.id, edge.kind, edge.source, edge.weight, edge.scope;`, 
 			if !scopeOK || !idOK || !relOK || !kindOK || !sourceOK || !weightOK {
 				return nil, errors.New("Invalid relationship in the database.")
 			}
-			neighbor, ok := visible[neighborID]
-			if !ok || neighbor.ID == seed.ID {
+			neighbor := indexes.document(neighborID)
+			if neighbor == nil || neighbor.ID == seed.ID {
 				continue
 			}
 			fromID, toID := seed.ID, neighbor.ID
 			if traversal.direction == "reverse" {
 				fromID, toID = toID, fromID
 			}
-			keepBest(bestByID, protocol.Match{Memory: neighbor, Reason: protocol.Reason{
+			keepBest(bestByID, protocol.Match{Memory: neighbor.Memory, Reason: protocol.Reason{
 				Kind: "relationship",
 				Path: &protocol.Path{
 					Scope: owner, RelationshipID: relID, FromID: fromID, ToID: toID, Kind: kind, Source: source,
