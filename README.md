@@ -65,6 +65,9 @@ bigbrain --db ./dev-data --json db-path --global
 
 JSON output includes the resolved `scope`, `directory`, and `database_file`.
 
+Use `bigbrain help` to list commands. Run `bigbrain query -h` or
+`bigbrain help query` to see the query flags, descriptions, and defaults.
+
 ## Record and retrieve evidence
 
 ```sh

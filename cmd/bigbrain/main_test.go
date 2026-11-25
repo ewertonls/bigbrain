@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ewertonls/bigbrain/internal/protocol"
@@ -43,6 +44,32 @@ func TestDBPathBeforeFirstWrite(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("db-path should leave the database directory absent, got %v", err)
+	}
+}
+
+func TestCommandHelp(t *testing.T) {
+	for _, args := range [][]string{
+		{"query", "-h"}, {"query", "--help"}, {"help", "query"},
+		{"--json", "query", "-h"}, {"help", "query", "--json"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if err := run(args, &stdout, &stderr); err != nil || stderr.Len() != 0 {
+			t.Fatalf("%v: %v, stderr %q", args, err, &stderr)
+		}
+		help := stdout.String()
+		if strings.HasPrefix(help, "{") {
+			var response protocol.Response
+			if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(response.Result, &help); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if !strings.HasPrefix(help, "Usage: bigbrain query ") || !strings.Contains(help, "-limit int") ||
+			!strings.Contains(help, "(default 10)") || strings.Contains(help, "-weight") {
+			t.Fatalf("%v printed unexpected query help:\n%s", args, help)
+		}
 	}
 }
 
