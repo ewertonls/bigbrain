@@ -36,6 +36,7 @@ type writeResult struct {
 
 type result struct {
 	ID     string `json:"id"`
+	Type   string `json:"type"`
 	Scope  string `json:"scope"`
 	Text   string `json:"text"`
 	Source string `json:"source"`
@@ -79,9 +80,13 @@ type invocation struct {
 }
 
 func (c cli) run(args ...string) invocation {
+	return c.invoke(append([]string{"--json"}, args...)...)
+}
+
+func (c cli) invoke(args ...string) invocation {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, c.bin, append([]string{"--json", "--db", c.db}, args...)...)
+	cmd := exec.CommandContext(ctx, c.bin, append([]string{"--db", c.db}, args...)...)
 	cmd.Dir = c.dir
 	cmd.Env = append(os.Environ(), c.env...)
 	var stdout, stderr bytes.Buffer
@@ -331,7 +336,12 @@ func main() {
 		check(json.NewEncoder(os.Stdout).Encode(map[string][]string{"passed_checks": checks}))
 		return
 	}
-	require(len(os.Args) == 3, "usage: acceptance BIGBRAIN FAULT_TEST_BIGBRAIN | --memory BIGBRAIN FIXTURE | --learning BIGBRAIN | --integration BIGBRAIN")
+	if len(os.Args) == 3 && os.Args[1] == "--import" {
+		verifyMarkdownImport(cli{bin: os.Args[2], db: filepath.Join(root, "import")})
+		check(json.NewEncoder(os.Stdout).Encode(map[string][]string{"passed_checks": {"markdown_import"}}))
+		return
+	}
+	require(len(os.Args) == 3, "usage: acceptance BIGBRAIN FAULT_TEST_BIGBRAIN | --memory BIGBRAIN FIXTURE | --learning BIGBRAIN | --integration BIGBRAIN | --import BIGBRAIN")
 	orbit := production("orbit")
 	require(!status(orbit).Running, "new database reported a running daemon")
 	help := exec.Command(orbit.bin, "--db", orbit.db, "help")
@@ -361,6 +371,8 @@ func main() {
 	fmt.Fprintln(os.Stderr, "Passed scope isolation, worktree configuration, and read-only query checks")
 	verifyLearning(production("learning"))
 	fmt.Fprintln(os.Stderr, "Passed publication, project feedback and reconciliation across projects")
+	verifyMarkdownImport(production("import"))
+	fmt.Fprintln(os.Stderr, "Passed Markdown import, provenance, and replay")
 	integrationChecks := verifyIntegration(orbit.bin, root)
 	fmt.Fprintln(os.Stderr, "Passed agent handoff, MCP parity and scoped graph views")
 
@@ -384,7 +396,7 @@ func main() {
 		ReopenMS float64    `json:"restart_and_first_query_ms"`
 	}{
 		append([]string{"cross_session_retrieval", "association_control", "scope_isolation", "git_worktrees", "read_only_query",
-			"simultaneous_startup", "protocol_version", "database_preservation",
+			"simultaneous_startup", "protocol_version", "database_preservation", "markdown_import",
 			"crash_before_commit", "crash_after_commit", "delete_before_commit", "delete_after_commit", "graceful_shutdown", "repeated_shutdown", learningCheck}, integrationChecks...),
 		scores, reopenMS,
 	}))
