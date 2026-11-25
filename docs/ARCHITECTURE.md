@@ -26,11 +26,15 @@ A **synapse** is a directed relationship. Foundation records its endpoints (`sou
 | `activation_count`, `last_activated_at` | The number of activations recorded through explicit feedback and the time of the most recent one. |
 | `created_at` | The time the relationship was created. |
 
+Store each relationship once. Retrieval can follow it from either endpoint. For example, `D1 → justified_by → E1` answers both “What evidence supports D1?” and “Which decisions rely on E1?” In the second case, the explanation marks the traversal as reverse and retains D1 as the source and E1 as the target. Both directions use the same weight, provenance, visibility checks, and traversal limits.
+
 Weight determines the relationship's priority during retrieval. An important hypothesis with little supporting evidence can have high weight and low confidence. Feedback on past use may increase the weight. Changes to confidence require identifiable evidence. Queries are read-only in every phase. Recording use or reinforcing a relationship requires a separate write.
 
 Migration from Foundation preserves memory IDs and the provenance of both memories and relationships. Older records remain queryable when their memory type or the new synapse attributes are unknown.
 
 ## Scope and publication
+
+The operating system account is the security boundary for the local socket and database files. Any client running under that account can select another project ID. Project scope isolates the working context of a request. Agents sharing an account therefore have access to the same set of projects.
 
 A query selects the global scope, a single project, or a project with explicit inclusion of the global scope. The daemon applies this selection before generating candidates and at every step of graph traversal. In Foundation, both endpoints of a relationship belong to the same scope. Starting in Memory, a relationship may also connect a project memory to a global memory in either direction. The relationship belongs to the project. Experiences from different projects can connect only through published global knowledge. Traversal requires both the relationship and its endpoints to be visible.
 
@@ -46,7 +50,17 @@ Foundation combines term matching with one-hop traversal along explicit relation
 
 Evaluate the first usable release with questions from real sessions where an agent resumed earlier work. Include paraphrases that share no search terms with the expected memory, and graphs larger than the Foundation fixture, with distractors and data from several projects. Fix the questions, expected sources, and result limit before tuning the ranking. Compare text search, text search with graph traversal, and hybrid retrieval on the same database. Record how often the top results include the expected memory and its source, how many irrelevant results appear, query latency, and indexing cost. Require more hits on paraphrases, preservation of direct hits, and scope isolation. Repeat the text and associative controls with the vector component unavailable.
 
+### Ranking within a scope
+
+For BM25, compute document count, document frequency for each query term, and average document length over the visible collection. Vector search must draw its candidates from that collection before applying the result limit. Taking the nearest neighbors from a shared index and filtering afterward can discard the best visible match. Weight adjustments and activation counts from private feedback belong to the project, even when the feedback concerns a global relationship. Changing a global weight requires a separate, reviewed global write with its own provenance.
+
+Before choosing LadybugDB indexes for Memory, record the ordered top results for B alone and for B with global included. Keep the query, model, index settings, and global data fixed. In A, add documents containing the query terms and near-duplicate vectors, then repeat both queries. The result IDs and their order must match the baseline. Compare vector candidates against exact search over the visible records to detect lost neighbors. If a shared index fails the isolation check, evaluate per-scope indexes or exact search within the selected scope. Repeat the isolation check with private feedback once reinforcement is available.
+
 ## Learning and the memory lifecycle
+
+Learning is a shared responsibility in phase 4. External agents record experiences, evidence, and explicit feedback and may propose lessons directly. BigBrain can also run a learning pass over existing records within a selected scope, even when the contributing agent supplied only observations. BigBrain owns the rules that apply feedback and retention policy, links each derived record to its evidence, and records who or what produced it. A learning pass is a separate write operation.
+
+For example, BigBrain can group repeated receiver failures and propose a procedure for checking quotas. It may use an optional, replaceable inference provider to draft the procedure or identify conflicting claims. Explicit rules can process feedback and apply forgetting policies offline. Inference receives only evidence visible to the pass. A proposal stays in its project until the user approves publication, regardless of whether an external agent or BigBrain produced it.
 
 | Process | Observable effect |
 | --- | --- |
@@ -56,14 +70,20 @@ Evaluate the first usable release with questions from real sessions where an age
 | Forgetting | An explicit policy may lower the priority of rarely used material. The evidence remains queryable within its scope. |
 | Reconciliation | Conflicting claims retain their sources. A review can explain how the claims apply in different contexts, why one is disputed, or why one supersedes another. |
 
-Starting in Memory, **invalidation** removes a memory and its relationships from retrieval candidates and paths. An explicit history query in the authorized scope reveals the reason and source for the invalidation. **Deletion** removes the memory from the active database along with its incident relationships and its entries in text and vector indexes. Reopening the database, rebuilding indexes, or retrying the original write with the same key must preserve the deletion. A published generalization has its own identity and source. Deleting a local source removes the relationship to it. The global record has its own review lifecycle.
+Starting in Memory, **invalidation** removes a memory and its relationships from ordinary retrieval. A history query in the selected scope can still inspect the reason, source, and affected decisions. For example, after E1 is invalidated, its history can list D1 by following the incoming `justified_by` relationship. D1 remains visible with its own status until a review changes it.
+
+**Deletion** removes a memory from the active database along with its incident relationships and entries in text and vector indexes. A published generalization has its own identity and source. Deleting a local source removes the relationship to it. The global record has its own review lifecycle.
+
+In the deletion transaction, replace each removed resource's creation receipt with a tombstone containing only the idempotency key, a fingerprint of the operation, scope, and payload, and the deleted status. Discard the original request body and cached result from the idempotency record. Replaying the matching creation request returns `RESOURCE_DELETED`. Reusing its key with different inputs still returns a conflict. The deletion request has its own key and replays its acknowledgment.
+
+To verify, delete E1, restart, and retry the requests that created E1 and its relationship to D1. Both must return `RESOURCE_DELETED`. Repeat after export and import. Rebuilding the indexes must leave E1 and its relationship absent.
 
 ## Phases and milestones
 
-| Phase | Acceptance milestone |
-| --- | --- |
-| 1. Foundation | After a daemon restart, a second agent revisits a decision and finds its evidence in one hop. [SPEC.md](SPEC.md) defines the concurrency, crash recovery, isolation, and distribution tests. |
-| 2. Memory | The first usable release distinguishes memory types and uses hybrid search to retrieve the source for a paraphrased query. Relationships between project and global memories respect the selected scope in every operation. |
-| 3. Synapses | A query finds evidence more than one hop away and explains the path. Activation propagation respects depth and neighbor limits, terminates on cyclic graphs, and prioritizes results using the available weight, context, and confidence. |
-| 4. Learning | An agent in B can apply a lesson proposed in A and approved for publication. Feedback and contrary evidence can be recorded with provenance, preserving the experiences and their review history. |
-| 5. Integration | Different agents use the versioned contract to resume the same work. An optional Model Context Protocol (MCP) adapter and a graph visualization follow the daemon's rules for queries and explanations. |
+| Phase | Stage | Acceptance milestone |
+| --- | --- | --- |
+| 1. Foundation | Prototype | After a daemon restart, a second agent revisits a decision and finds its evidence in one hop. [SPEC.md](SPEC.md) defines the concurrency, crash recovery, isolation, and distribution tests. |
+| 2. Memory | First usable release | Typed memories support hybrid retrieval of the source for a paraphrased query. Project–global relationships respect the selected scope, and adding private records in another project preserves the results and their order. |
+| 3. Synapses | Associative memory | A query finds evidence more than one hop away and explains the path. Activation propagation respects depth and neighbor limits, terminates on cyclic graphs, and ranks by weight, context, and available confidence. |
+| 4. Learning | Cognitive system | Given only observations from A, BigBrain proposes a lesson and cites its evidence. After user approval, an agent in B can apply it and record feedback or contrary evidence with provenance. |
+| 5. Integration | Ecosystem | Different agents use the versioned contract to resume the same work. An optional Model Context Protocol (MCP) adapter and a graph visualization follow the daemon's rules for queries and explanations. |

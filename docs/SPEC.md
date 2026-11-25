@@ -20,7 +20,7 @@ The client chooses a project ID once, stores it in configuration shared by the p
 
 **Global** refers to a local collection under the same operating system account. To share a lesson in the prototype, the user reviews the text and source reference that can be shared, then saves a new global memory. The original and its relationships stay in the project. Each project query can explicitly include the global collection.
 
-The daemon enforces scope before searching and at every traversal step. The same rule covers lookups by ID, explanations, content, counts, and source references. Project isolation protects each project's working context. The operating system account controls access to the files and local socket.
+The operating system account controls access to the database files and local socket. Clients running under that account can select a different project by supplying its ID. The ID selects the working context for a request. The daemon limits searches and each traversal step to the selected scope, including lookups by ID, explanations, content, counts, and source references.
 
 **Retrieved memories are evidence.** The response returns the text in a data field alongside its source and the reason it was retrieved. Queries are read-only, even if the text contains an instruction. Any subsequent action by an agent requires its own authorization. Conflicting claims retain their sources so a reader can examine them side by side.
 
@@ -28,7 +28,7 @@ The daemon enforces scope before searching and at every traversal step. The same
 
 The MVP needs three CLI data operations. The first records a memory and returns its ID. The second links two existing IDs and records the source of the relationship. The third queries the selected scope and returns IDs and sources up to the requested result limit. The Memory phase introduces memory types, invalidation, deletion, and relationships between project and global memories.
 
-A text query finds memories that contain the search terms. In associative mode, the same matches provide starting points. The daemon follows explicit relationships for one hop, limits the number of neighbors it examines per memory, and gives higher-weight relationships priority. It deduplicates results by ID, retains the best text match, and reports how it reached each neighbor. The first experiment can use a text scan and break ties by ID for stable ordering.
+A text query finds memories that contain the search terms. In associative mode, the daemon explores one hop from each text match along incoming and outgoing relationships. It limits how many neighbors it examines per match and gives higher-weight relationships priority. It deduplicates results by ID and retains the best text match. Each neighbor's explanation reports the relationship in its stored direction and the direction the query traveled (forward or reverse). The first experiment can use a text scan and break ties by ID for stable ordering.
 
 ### Cross-session retrieval experiment
 
@@ -43,8 +43,9 @@ An agent records the following fictional data in project A and ends its session.
 The agent links D1 to E1 with the relationship `justified_by` and cites the review of Decision 12 as the source of the link. A second agent searches for `Orbit` with a limit of two results.
 
 - **Text-only control.** Return D1. It is the only record whose text contains the search term.
-- **With the relationship.** Return D1 and E1. The explanation for E1 shows the path `D1 → justified_by → E1`, the source of the link, and Test 7. E2 stays out of the results.
-- **Control without the relationship.** Repeat the associative query on a copy with the same texts and the link removed. Only D1 should appear. Reopening the original database should return both D1 and E1 again.
+- **Forward traversal.** Return D1 and E1. The explanation for E1 shows the stored relationship `D1 → justified_by → E1`, forward traversal from D1 to E1, the review of Decision 12, and Test 7. E2 stays out of the results.
+- **Reverse traversal.** Query `receiver` with the same limit. Text alone returns E1. Associative mode also returns D1 using the same stored relationship `D1 → justified_by → E1`. The explanation for D1 reports reverse traversal from E1 to D1, the review of Decision 12 as the link source, and Decision 12 as the memory source.
+- **Control without the relationship.** Repeat both associative queries on a copy with the same texts and the link removed. Only D1 should appear for `Orbit` and only E1 for `receiver`. Reopening the original database should return both D1 and E1 for each query again.
 
 Before tuning the ranking, set aside six questions an agent might ask when resuming work. Three should have direct text matches and three should require a relationship. Record in advance which memory supports each answer. Compare both retrieval modes on the same database with a limit of three results. Count a hit when the expected memory and its source appear in the top three. Associative mode should gain at least two hits on the relationship-dependent questions and retain all direct hits. Also record how many irrelevant results each mode returns.
 
@@ -60,7 +61,7 @@ The caller generates an idempotency key for each write. Before invoking the CLI,
 | --- | --- |
 | First data command | The CLI tries to connect to the database's socket. If the daemon is absent, one client wins the startup election and launches the same executable in daemon mode. The others wait. The daemon signals readiness only after it has gained exclusive ownership and opened the database. Clients wait up to a deadline and report a diagnostic if startup fails. |
 | Running instance | The CLI checks the database identity and protocol version before sending the operation. On a version mismatch, it returns a stable error code and guidance on aligning the versions. Help and status work while the daemon is stopped. |
-| Concurrent writes | The daemon may queue writes. It commits the write, key, and result in one transaction before acknowledging the request. Reusing the key with the same operation, scope, and payload returns the previous result. Any difference produces a conflict without exposing the previous request. |
+| Concurrent writes | The daemon may queue writes. It commits the write, key, and result in one transaction before acknowledging the request. Reusing the key with a different operation, scope, or payload produces a conflict without exposing the previous request. A matching retry returns the previous result while the resource exists. Once Memory introduces deletion, retrying the matching creation request for a deleted resource returns `RESOURCE_DELETED`. |
 | Requested shutdown | The daemon declines new requests, finishes accepted ones, closes the database, and releases the socket and exclusive ownership. The CLI confirms shutdown after observing that the specific instance has exited. Clients that arrive during shutdown receive a temporary status. Asking for shutdown again when the daemon is absent succeeds. |
 | Crash or stale socket | On startup, the daemon checks the operating system lock and instance identity before removing a stale socket. Once it has exclusive ownership, it reopens the database and checks its integrity. If the database is busy, unreadable, or incompatible, startup reports a diagnostic and preserves the files. A client can retry a write whose outcome is unknown using the original key. |
 
