@@ -20,7 +20,7 @@ const (
 	DefaultMaxNeighbors = 5
 	MaxGraphNeighbors   = 10
 
-	maxMemoryTextBytes = 64 << 10
+	MaxMemoryTextBytes = 64 << 10
 	maxSourceBytes     = 4 << 10
 	maxQueryTextBytes  = 4 << 10
 
@@ -28,7 +28,7 @@ const (
 	// also carries IDs, type, scope, direction, timestamps and numeric fields.
 	maxEncodedPathBytes = 6*maxSourceBytes + (8 << 10)
 	// A match may include every step and repeat the terminal step in path.
-	maxEncodedMatchBytes = 6*(maxMemoryTextBytes+maxSourceBytes+maxQueryTextBytes) + (16 << 10) +
+	maxEncodedMatchBytes = 6*(MaxMemoryTextBytes+maxSourceBytes+maxQueryTextBytes) + (16 << 10) +
 		(MaxGraphDepth+1)*maxEncodedPathBytes
 	MaxResponseBytes = MaxQueryLimit*maxEncodedMatchBytes + 1024
 )
@@ -179,7 +179,7 @@ func (r RecordRequest) Validate() error {
 	if err := validateScope(r.Scope); err != nil {
 		return err
 	}
-	if !validText(r.Key, 256) || !validText(r.Text, maxMemoryTextBytes) || !validText(r.Source, maxSourceBytes) {
+	if !validText(r.Key, 256) || !validText(r.Text, MaxMemoryTextBytes) || !validText(r.Source, maxSourceBytes) {
 		return NewError("INVALID_REQUEST", "Record requires a valid key, text, and source.")
 	}
 	switch r.Type {

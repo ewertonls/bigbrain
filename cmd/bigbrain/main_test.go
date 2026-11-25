@@ -117,6 +117,9 @@ func TestJSONOutputWithHelpAndInvalidFlags(t *testing.T) {
 	}{
 		{"help command", []string{"help", "--json"}, true, ""},
 		{"help flag", []string{"status", "--help", "--json"}, true, ""},
+		{"import needs a directory", []string{"import", "--global", "--json"}, true, "INVALID_REQUEST"},
+		{"import takes one directory", []string{"import", "docs", "more", "--json"}, true, "INVALID_REQUEST"},
+		{"import scopes conflict across directory", []string{"import", "--project", "A", "docs", "--global", "--json"}, true, "INVALID_SCOPE"},
 		{"consolidation is project-local", []string{"consolidate", "--global", "--key", "draft", "--evidence", "a", "--json"}, true, "INVALID_SCOPE"},
 		{"empty external draft", []string{"consolidate", "--db", "/dev/null", "--project", "A", "--key", "draft", "--evidence", "a", "--text", "", "--json"}, true, "INVALID_REQUEST"},
 		{"JSON after invalid value", []string{"query", "--limit", "many", "--json=T"}, true, "INVALID_REQUEST"},

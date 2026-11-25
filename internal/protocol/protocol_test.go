@@ -69,7 +69,7 @@ func TestResponseLimitCoversEscapedMultiHopMatches(t *testing.T) {
 	last := &steps[len(steps)-1]
 	match := Match{
 		Memory: Memory{
-			ID: last.ToID, Scope: scope, Text: strings.Repeat("&", maxMemoryTextBytes),
+			ID: last.ToID, Scope: scope, Text: strings.Repeat("&", MaxMemoryTextBytes),
 			Source: source, Type: "observation", RecordedAt: timestamp,
 		},
 		Reason: Reason{Kind: "relationship", GraphScore: 0.5, Steps: steps, Path: last, Hops: len(steps)},

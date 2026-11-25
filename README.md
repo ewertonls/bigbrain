@@ -70,6 +70,30 @@ JSON output includes the resolved `scope`, `directory`, and `database_file`.
 Use `bigbrain help` to list commands. Run `bigbrain query -h` or
 `bigbrain help query` to see the query flags, descriptions, and defaults.
 
+## Import a Markdown directory
+
+From a configured project, import its documentation and search the imported text:
+
+```sh
+bigbrain import docs/ --current-project
+bigbrain query --current-project --mode text --text "deployment"
+```
+
+Use `--project ID` to name the destination directly or `--global` to import into the
+global collection. The importer recursively reads UTF-8 `.md` and `.markdown`
+files, ignores extension case, and skips hidden entries, symlinks and blank files.
+Each section starting with a Markdown heading (`#` through `######`) becomes a
+semantic memory. Text before the first heading is included, and sections over
+64 KiB are split into smaller memories. Each memory cites its starting line,
+such as `docs/deploy.md#L12`. Project imports use paths relative to the Git
+worktree when available. Global imports and files outside Git use absolute paths.
+
+Run the same import again to pick up changes. BigBrain reuses memories with the
+same scope, source location and content. Edited or moved sections create new
+memories, and previous versions remain searchable. If an import stops partway
+through, fix the reported error and rerun it. Add `--json` for counts of nonblank
+files processed (`files`), new memories (`created`) and existing ones (`replayed`).
+
 ## Record and retrieve evidence
 
 ```sh

@@ -21,6 +21,7 @@ const overview = `Usage: bigbrain [flags] COMMAND
 
 Commands:
   record           Store a memory with its source.
+  import           Import Markdown files from a directory.
   link             Connect memories within a scope or between a project and global.
   consolidate      Propose a local lesson from project evidence.
   publish          Publish the approved text and source of a project lesson.
@@ -119,6 +120,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		_, err = fmt.Fprint(stdout, value)
 	case protocol.WriteResult:
 		_, err = fmt.Fprintln(stdout, value.ID)
+	case importResult:
+		_, err = fmt.Fprintf(stdout, "Markdown files: %d\nMemories created: %d\nMemories already imported: %d\n", value.Files, value.Created, value.Replayed)
 	case protocol.StatusResult:
 		_, err = fmt.Fprintln(stdout, value.State)
 	case databaseLocation:
@@ -209,6 +212,8 @@ func execute(args []string, options *options) (any, error) {
 	flags.BoolVar(&scope.global, "global", false, globalUsage)
 
 	switch command {
+	case "import":
+		return importCommand(flags, args, &scope, options)
 	case "db-path":
 		if err := options.parseFlags(flags, args); err != nil {
 			return parseError(flags, err)
@@ -532,6 +537,8 @@ func helpText(flags *flag.FlagSet) string {
 		out.WriteString("Usage: bigbrain project [flags] init ID\n")
 	case "project init":
 		out.WriteString("Usage: bigbrain project init [flags] ID\n")
+	case "import":
+		out.WriteString("Usage: bigbrain import [flags] DIR\n\nRecursively record Markdown sections as semantic memories.\n")
 	case "help":
 		out.WriteString("Usage: bigbrain help [flags] [COMMAND]\n")
 	default:

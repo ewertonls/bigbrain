@@ -48,7 +48,7 @@ func (r ConsolidateRequest) Validate() error {
 	if r.ExternalProposal == nil {
 		return nil
 	}
-	if !validText(r.Text, maxMemoryTextBytes) || !validText(r.AppliesWhen, maxSourceBytes) ||
+	if !validText(r.Text, MaxMemoryTextBytes) || !validText(r.AppliesWhen, maxSourceBytes) ||
 		!validText(r.Rationale, maxSourceBytes) || !validText(r.Producer, maxSourceBytes) {
 		return NewError("INVALID_REQUEST", "An external proposal requires text, applicability, rationale, and a producer.")
 	}

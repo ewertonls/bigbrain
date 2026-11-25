@@ -30,7 +30,7 @@ func (r ReconcileRequest) Validate() error {
 	if !validText(r.Key, 256) || !validText(r.SupportingID, 256) || !validText(r.ContraryID, 256) || r.SupportingID == r.ContraryID {
 		return NewError("INVALID_REQUEST", "Reconciliation requires a valid key and two distinct claim IDs.")
 	}
-	if !validText(r.Text, maxMemoryTextBytes) || !validText(r.AppliesWhen, maxSourceBytes) ||
+	if !validText(r.Text, MaxMemoryTextBytes) || !validText(r.AppliesWhen, maxSourceBytes) ||
 		!validText(r.Rationale, maxSourceBytes) || !validText(r.Author, maxSourceBytes) || !validText(r.Source, maxSourceBytes) {
 		return NewError("INVALID_REQUEST", "A review requires a conclusion, applicability, rationale, author, and source.")
 	}

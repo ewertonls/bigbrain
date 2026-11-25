@@ -17,7 +17,7 @@ func (r PublishRequest) Validate() error {
 		return NewError("INVALID_REQUEST", "Explicit approval is required to publish a lesson.")
 	}
 	if !validText(r.Key, 256) || !validText(r.ProposalID, 256) ||
-		!validText(r.Text, maxMemoryTextBytes) || !validText(r.Source, maxSourceBytes) {
+		!validText(r.Text, MaxMemoryTextBytes) || !validText(r.Source, maxSourceBytes) {
 		return NewError("INVALID_REQUEST", "Publication requires a valid key, proposal ID, approved text, and public source.")
 	}
 	return nil
