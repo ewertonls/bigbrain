@@ -4,6 +4,34 @@ BigBrain stores local memories and the relationships that connect them. A
 later session can find a decision and follow it to the original evidence.
 Foundation runs offline on Debian 12 ARM64 with LadybugDB 0.17.0.
 
+## Local development
+
+BigBrain uses the official Go binding and native LadybugDB library, both at
+`v0.17.0`. The native archives target macOS 13.3 or newer and glibc-based
+Linux on ARM64 and x86-64. Install Go 1.26 or newer, GNU Make, a native C
+toolchain, curl, tar, and either `sha256sum` or `shasum`. Use a Go toolchain
+for the architecture of your shell. On macOS the Xcode Command Line Tools
+supply Make and the compiler.
+
+```sh
+git clone https://github.com/ewertonls/bigbrain.git
+cd bigbrain
+make setup
+make build
+make test
+make run ARGS="--help"
+```
+
+`make setup` verifies the release archive's SHA-256 checksum and installs
+the header and shared library in `lib-ladybug/`. Subsequent builds and tests
+reuse that installation. Go fetches the binding through the regular module
+dependency in `go.mod`. This follows [Option 2 in the binding README](https://github.com/LadybugDB/go-ladybug/blob/v0.17.0/README.md#option-2-add-the-compiled-libraries-to-your-project).
+
+The Makefile sets the `system_ladybug` build tag and embeds the checkout's
+library path in the executable and test binaries. You can run
+`./build/bigbrain` directly. Rebuild after moving the checkout.
+`make clean` removes the local executable and keeps the downloaded library.
+
 ## Build and install
 
 From the source checkout on a machine with Docker:

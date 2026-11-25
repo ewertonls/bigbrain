@@ -1,5 +1,7 @@
 .git
 /artifacts
 /dist
+/build
+/lib-ladybug
 /spikes/ladybug/artifacts
 /spikes/ladybug/dist
