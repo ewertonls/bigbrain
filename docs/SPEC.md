@@ -6,11 +6,11 @@ When an agent returns to a project, it may find a decision without knowing why s
 
 | Area | Proposal |
 | --- | --- |
-| Database | Start with LadybugDB. SQLite was also considered. LadybugDB's suitability for this workload still needs to be measured. |
-| CLI and daemon | Evaluate shipping both in one executable. A data command starts the daemon in the background if needed. Subsequent commands reuse the running instance. The user can stop it from the CLI. |
+| Database | LadybugDB and its Go binding at 0.17.0, qualified in the [technical spike](../spikes/ladybug/REPORT.md). The daemon serializes writes. |
+| CLI and daemon | Both ship in one Go executable. A data command starts the daemon in the background if needed. Subsequent commands reuse the running instance. The user can stop it from the CLI. |
 | MVP scope | Store memories locally, independently of the agent or model. A query with a project ID searches only that project by default. Including the global collection requires an explicit choice. The first evaluation uses text and recorded relationships with the network disabled. |
-| Prototype choices | Use Go if the binding passes the transaction, crash recovery, and offline distribution tests. Use HTTP over a Unix domain socket and versioned JSON. |
-| Open decisions | The first Unix platform and CPU architecture, final CLI syntax, physical schema, and ranking beyond the one-hop experiment. Cypher is a candidate query language. |
+| Platform and protocol | Debian 12 ARM64, using HTTP over a Unix domain socket and versioned JSON. The [CLI guide](../README.md) describes the supported flags. |
+| Open decisions | Ranking beyond the one-hop experiment. |
 
 ## Memories, relationships, and access
 
