@@ -43,6 +43,7 @@ COPY --from=build /out/bin/bigbrain /bigbrain/bin/bigbrain
 COPY --from=target-native /opt/ladybug/lib /bigbrain/lib
 COPY spikes/ladybug/LICENSES /bigbrain/licenses
 COPY README.md /bigbrain/README.md
+COPY integrations /bigbrain/integrations
 
 FROM build AS acceptance-build
 COPY tests/acceptance ./tests/acceptance
@@ -52,7 +53,7 @@ RUN export CGO_LDFLAGS="-L/opt/ladybug/lib -llbug -Wl,-rpath,\$ORIGIN/../lib" \
 
 FROM debian:bookworm-slim@sha256:e67eeead736ff7bbe258ef088bff683635c561b1fcfefad0806c1df4ab49ce0e AS acceptance
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends git \
+    && apt-get install --yes --no-install-recommends git python3 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=acceptance-build /out/bin/bigbrain-faults /opt/acceptance/bin/bigbrain-faults
 COPY --from=acceptance-build /out/bin/acceptance /opt/acceptance/bin/acceptance
