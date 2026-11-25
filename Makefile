@@ -7,7 +7,7 @@ export CGO_CFLAGS := "-I$(ladybug_dir)"
 # The system_ladybug binding supplies -llbug.
 export CGO_LDFLAGS := "-L$(ladybug_dir)"
 
-.PHONY: setup build run test test-learning evaluate-memory clean
+.PHONY: setup build run test test-learning test-integration evaluate-memory clean
 
 build: setup
 	go build $(go_flags) -o build/bigbrain ./cmd/bigbrain
@@ -23,6 +23,9 @@ test: setup
 
 test-learning: build
 	go run $(go_flags) ./tests/acceptance --learning "$(CURDIR)/build/bigbrain"
+
+test-integration: build
+	go run $(go_flags) ./tests/acceptance --integration "$(CURDIR)/build/bigbrain"
 
 evaluate-memory: build
 	go run $(go_flags) ./tests/acceptance --memory "$(CURDIR)/build/bigbrain" tests/memory/fixture.json

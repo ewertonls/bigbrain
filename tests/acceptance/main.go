@@ -326,7 +326,12 @@ func main() {
 		check(json.NewEncoder(os.Stdout).Encode(map[string][]string{"passed_checks": {learningCheck}}))
 		return
 	}
-	require(len(os.Args) == 3, "usage: acceptance BIGBRAIN FAULT_TEST_BIGBRAIN | --memory BIGBRAIN FIXTURE | --learning BIGBRAIN")
+	if len(os.Args) == 3 && os.Args[1] == "--integration" {
+		checks := verifyIntegration(os.Args[2], root)
+		check(json.NewEncoder(os.Stdout).Encode(map[string][]string{"passed_checks": checks}))
+		return
+	}
+	require(len(os.Args) == 3, "usage: acceptance BIGBRAIN FAULT_TEST_BIGBRAIN | --memory BIGBRAIN FIXTURE | --learning BIGBRAIN | --integration BIGBRAIN")
 	orbit := production("orbit")
 	require(!status(orbit).Running, "new database reported a running daemon")
 	help := exec.Command(orbit.bin, "--db", orbit.db, "help")
@@ -356,6 +361,8 @@ func main() {
 	fmt.Fprintln(os.Stderr, "Passed scope isolation, worktree configuration, and read-only query checks")
 	verifyLearning(production("learning"))
 	fmt.Fprintln(os.Stderr, "Passed publication, project feedback and reconciliation across projects")
+	integrationChecks := verifyIntegration(orbit.bin, root)
+	fmt.Fprintln(os.Stderr, "Passed agent handoff, MCP parity and scoped graph views")
 
 	verifyStartup(production("simultaneous"))
 	fmt.Fprintln(os.Stderr, "Passed simultaneous startup and persisted writes")
@@ -376,9 +383,9 @@ func main() {
 		Scores   evaluation `json:"retrieval"`
 		ReopenMS float64    `json:"restart_and_first_query_ms"`
 	}{
-		[]string{"cross_session_retrieval", "association_control", "scope_isolation", "git_worktrees", "read_only_query",
+		append([]string{"cross_session_retrieval", "association_control", "scope_isolation", "git_worktrees", "read_only_query",
 			"simultaneous_startup", "protocol_version", "database_preservation",
-			"crash_before_commit", "crash_after_commit", "delete_before_commit", "delete_after_commit", "graceful_shutdown", "repeated_shutdown", learningCheck},
+			"crash_before_commit", "crash_after_commit", "delete_before_commit", "delete_after_commit", "graceful_shutdown", "repeated_shutdown", learningCheck}, integrationChecks...),
 		scores, reopenMS,
 	}))
 }

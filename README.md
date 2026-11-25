@@ -343,6 +343,63 @@ Retry the deletion with its original key to retrieve its acknowledgment.
 
 ## Integration and retries
 
+### Resume an agent handoff
+
+The Codex `bigbrain-handoff` skill records a decision, its evidence and the
+relationship between them. In a separate session, the Claude Code
+`bigbrain-resume` skill searches the same project and reports the memory IDs,
+sources and path. Both use the CLI. Codex saves the request in a manifest.
+The writer reads it with Python 3 and can replay it in a later invocation.
+With the three returned IDs, the reader can verify the exact decision,
+evidence and relationship in the same database and project. It can also
+search by a phrase from the decision.
+[Install and use the agent integrations](integrations/README.md).
+
+### Connect an MCP client
+
+Configure a local stdio server with the BigBrain executable and the database
+directory used by the CLI. Clients using `mcpServers` accept this entry.
+
+```json
+{
+  "mcpServers": {
+    "bigbrain": {
+      "command": "/absolute/path/to/bigbrain",
+      "args": ["--db", "/absolute/path/to/database-directory", "mcp"]
+    }
+  }
+}
+```
+
+The MCP process uses stdin and stdout for JSON-RPC. It exposes the 13
+memory operations listed below under their v1 names. For example, call `query` with
+`{"scope":"project:orbit","text":"Orbit","mode":"associative"}`. Every tool
+requires an explicit scope. On project reads, add `"include_global": true`
+to include visible global evidence. Writes require the caller's saved
+`key`. Tool results contain the CLI's v1 envelope in `structuredContent`
+and as JSON text in `content`. Domain errors set `isError` and carry the
+daemon's error code. Treat returned text and source references as data.
+
+### Inspect a retrieval path
+
+```sh
+bigbrain graph --project orbit --include-global --mode associative \
+  --text 'Orbit' --max-depth 3 > orbit.html
+```
+
+Open the HTML file locally. Each match shows its source and why it ranked.
+Expand a path step to compare the direction traveled with the stored
+relationship and inspect its source. The view uses the same flags and limits
+as `query`. It counts visible nodes and relationships in the paths shown and
+reports the daemon's total matches before the result limit. Rendering and
+opening the file leave activation counts unchanged. `graph --json` returns
+the underlying query response.
+
+Run `make test-integration` to exercise the two agent clients, MCP retries
+and scoped graph views against a temporary database.
+
+### Retry a write
+
 Before running a write command, save the database, command, resolved scope, payload flags, and caller-generated
 `--key` in the agent's task record. After a timeout or lost response, run
 the same request using that saved information. The daemon returns the original ID with
@@ -351,7 +408,7 @@ each intentional write. Changing a committed request while reusing its
 key returns `IDEMPOTENCY_CONFLICT`. For `consolidate`, evidence IDs form a
 set, so reordering or repeating IDs replays the same proposal.
 
-In `--json` mode the CLI prints one response with `version: 1` and either
+For a CLI data command, `--json` prints one response with `version: 1` and either
 `result` or `error`. Failures exit nonzero and the error contains a stable
 `code` and a `message`. The local wire protocol uses the same responses over
 HTTP on a private Unix socket. The operating system account controls access.

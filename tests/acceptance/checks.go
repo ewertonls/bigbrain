@@ -98,7 +98,8 @@ func snapshot(c cli) databaseSnapshot {
 	return databaseSnapshot{
 		Memories: rows(conn, "MATCH (m:Memory) RETURN m.id, m.scope, m.text, m.source, m.recorded_at, m.memory_type, m.status, m.invalid_reason, m.invalid_source, m.invalid_at ORDER BY m.id"),
 		Relationships: rows(conn, `MATCH (a:Memory)-[e:Evidence]->(b:Memory)
-RETURN e.id, a.id, b.id, e.kind, e.weight, e.source, e.scope ORDER BY e.id`),
+RETURN e.id, a.id, b.id, e.kind, e.weight, e.source, e.scope, e.confidence,
+       e.activation_count, e.last_activated_at, e.created_at ORDER BY e.id`),
 		Receipts: rows(conn, "MATCH (r:Receipt) RETURN r.key, r.operation, r.scope, r.fingerprint, r.result_id, r.deleted ORDER BY r.key"),
 	}
 }
