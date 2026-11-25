@@ -2,7 +2,7 @@
 kadai: task
 id: "BB-0013"
 title: "Manage one daemon per physical database"
-status: "todo"
+status: "done"
 parent: BB-0002
 depends_on: [BB-0012]
 ---
@@ -13,3 +13,13 @@ Elect one instance per database, open the database exclusively, and restrict the
 Two clients starting simultaneously use the same instance. An accepted write finishes during shutdown, and two consecutive shutdown requests succeed. Handle a stale socket after checking the lock and instance identity. Preserve the files when a database is busy, unreadable, or incompatible.
 
 [Project reference](../../docs/SPEC.md)
+
+<!-- kadai:log:start -->
+
+## Log
+
+### 2026-11-24T22:32:25-03:00
+
+The packaged daemon passed simultaneous startup through real and symlinked database paths, stale socket recovery, shutdown during an accepted write, and repeated shutdown. Busy and incompatible databases were preserved. A separate unprivileged check confirmed an unreadable database retained its checksum after startup was rejected. Daemon lifecycle diagnostics go to the private daemon.log.
+
+<!-- kadai:log:end -->
