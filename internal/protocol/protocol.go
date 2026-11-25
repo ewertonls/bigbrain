@@ -181,12 +181,19 @@ func (r LinkRequest) Validate() error {
 	return nil
 }
 
-func (r QueryRequest) Validate() error {
-	if err := validateScope(r.Scope); err != nil {
+func validateReadScope(scope string, includeGlobal bool) error {
+	if err := validateScope(scope); err != nil {
 		return err
 	}
-	if r.IncludeGlobal && r.Scope == "global" {
+	if includeGlobal && scope == "global" {
 		return NewError("INVALID_SCOPE", "Global inclusion requires a project scope.")
+	}
+	return nil
+}
+
+func (r QueryRequest) Validate() error {
+	if err := validateReadScope(r.Scope, r.IncludeGlobal); err != nil {
+		return err
 	}
 	if (r.ID == "") == (r.Text == "") || r.ID != "" && !validText(r.ID, 256) ||
 		r.Text != "" && !validText(r.Text, maxQueryTextBytes) {

@@ -23,6 +23,13 @@ var migrations = [][]string{
 		"ALTER TABLE Evidence ADD scope STRING;",
 		"MATCH (a:Memory)-[e:Evidence]->(:Memory) SET e.scope = a.scope;",
 	},
+	{
+		"ALTER TABLE Memory ADD status STRING DEFAULT 'active';",
+		"ALTER TABLE Memory ADD invalid_reason STRING;",
+		"ALTER TABLE Memory ADD invalid_source STRING;",
+		"ALTER TABLE Memory ADD invalid_at STRING;",
+		"ALTER TABLE Receipt ADD deleted BOOL DEFAULT false;",
+	},
 }
 
 func (s *Store) openSchema() error {
@@ -71,8 +78,8 @@ func (s *Store) openSchema() error {
 
 func (s *Store) checkSchema() error {
 	for _, statement := range []string{
-		"MATCH (m:Memory) RETURN m.id, m.scope, m.text, m.source, m.recorded_at, m.memory_type LIMIT 0;",
-		"MATCH (r:Receipt) RETURN r.key, r.operation, r.scope, r.fingerprint, r.result_id LIMIT 0;",
+		"MATCH (m:Memory) RETURN m.id, m.scope, m.text, m.source, m.recorded_at, m.memory_type, m.status, m.invalid_reason, m.invalid_source, m.invalid_at LIMIT 0;",
+		"MATCH (r:Receipt) RETURN r.key, r.operation, r.scope, r.fingerprint, r.result_id, r.deleted LIMIT 0;",
 		"MATCH (:Memory)-[r:Evidence]->(:Memory) RETURN r.id, r.kind, r.weight, r.source, r.scope LIMIT 0;",
 	} {
 		if _, err := s.query(statement, nil); err != nil {

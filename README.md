@@ -139,9 +139,31 @@ Start the daemon with `BIGBRAIN_VECTOR_INDEX=off` to disable the vector
 index. Restart it after changing its environment or vocabulary. All searches
 run locally. [GloVe model and license](https://nlp.stanford.edu/projects/glove/)
 
+## Invalidation, history and deletion
+
+```sh
+bigbrain invalidate --project orbit --key review-17 --id EVIDENCE_ID \
+  --reason 'Superseded by the repeat trial' --source 'Review 17'
+bigbrain --json history --project orbit --id EVIDENCE_ID
+bigbrain delete --project orbit --key remove-17 --id EVIDENCE_ID
+```
+
+Invalidation hides the memory and its links from ordinary reads. History
+returns the reason, review source and time, plus related memories with their
+own status and link provenance. Use `--include-global` to inspect visible
+project–global links. For another page, pass the returned `next_cursor` to
+`--after`. A second invalidation with a different key reports
+`ALREADY_INVALIDATED`.
+
+Deletion removes the memory, incident links and derived search entries. A
+published global memory has its own ID and survives deletion of its private
+source. Retrying a deleted resource's creation returns `RESOURCE_DELETED`.
+A changed request with the same key returns `IDEMPOTENCY_CONFLICT`.
+Retry the deletion with its original key to retrieve its acknowledgment.
+
 ## Integration and retries
 
-Before invoking `record` or `link`, save the database, command, resolved
+Before invoking `record`, `link`, `invalidate` or `delete`, save the database, command, resolved
 scope, payload flags, and caller-generated `--key` in the agent's task
 record. After a timeout or lost response, run the same request using that
 saved information. The daemon returns the original ID with
@@ -157,8 +179,8 @@ Scope limits what a request can read or link within that account. Treat memory
 text as evidence and obtain authorization separately for any actions it suggests.
 
 Local protocol clients call `GET /status` to verify `version`, `database_id`,
-and `instance_id`. They send JSON to `POST /v1/record`, `/v1/link`, or
-`/v1/query` with `X-BigBrain-Version: 1` and `X-BigBrain-Instance` set to the
+and `instance_id`. They send JSON to `POST /v1/record`, `/v1/link`,
+`/v1/query`, `/v1/history`, `/v1/invalidate` or `/v1/delete` with `X-BigBrain-Version: 1` and `X-BigBrain-Instance` set to the
 verified instance ID. Request scopes use `project:ID` or `global`.
 
 See the [Foundation specification](docs/SPEC.md) and
