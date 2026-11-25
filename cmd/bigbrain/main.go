@@ -30,6 +30,8 @@ Commands:
   feedback-history Inspect recorded uses and priority changes for a relationship.
   reconcile        Review two claims and record a project conclusion.
   query            Search memories or look up an ID.
+  graph            Show a query's memories and paths as standalone HTML.
+  mcp              Serve memory tools to an MCP client over standard I/O.
   invalidate       Hide a memory and preserve its history.
   history          Inspect a memory and its visible relationships.
   delete           Delete a memory and its incident relationships.
@@ -63,6 +65,9 @@ type databaseLocation struct {
 	DatabaseFile string `json:"database_file"`
 }
 
+// Some commands write their own format directly to stdout.
+type streamOutput func(io.Writer) error
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "__daemon" {
 		if err := runDaemon(os.Args[2:]); err != nil {
@@ -91,6 +96,13 @@ func runDaemon(args []string) error {
 func run(args []string, stdout, stderr io.Writer) error {
 	var options options
 	result, err := execute(args, &options)
+	if stream, ok := result.(streamOutput); ok {
+		if err := stream(stdout); err != nil {
+			fmt.Fprintln(stderr, err)
+			return err
+		}
+		return nil
+	}
 	if options.json {
 		if outputErr := protocol.Encode(stdout, result, err); outputErr != nil {
 			fmt.Fprintln(stderr, outputErr)
@@ -115,6 +127,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 		encoder := json.NewEncoder(stdout)
 		encoder.SetIndent("", "  ")
 		err = encoder.Encode(value)
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, err)
 	}
 	return err
 }
@@ -154,6 +169,13 @@ func execute(args []string, options *options) (any, error) {
 	switch command {
 	case "help":
 		return helpText(flags), nil
+	case "mcp":
+		if err := options.parseFlags(flags, args); err != nil {
+			return parseError(flags, err)
+		}
+		return streamOutput(func(w io.Writer) error {
+			return serveMCP(options.db, os.Stdin, w)
+		}), nil
 	case "project":
 		if err := options.parse(flags, args); err != nil {
 			return parseError(flags, err)
@@ -264,7 +286,7 @@ func execute(args []string, options *options) (any, error) {
 		flags.IntVar(&request.Limit, "limit", protocol.DefaultQueryLimit, "maximum related records per page")
 		flags.StringVar(&request.After, "after", "", "relationship cursor from the previous page")
 		return dataCommand[protocol.HistoryResult](flags, args, &scope, options, &request.Scope, &request)
-	case "query":
+	case "query", "graph":
 		var request protocol.QueryRequest
 		flags.StringVar(&request.Text, "text", "", "search text (use either -text or -id)")
 		flags.StringVar(&request.ID, "id", "", "memory ID")
@@ -275,7 +297,20 @@ func execute(args []string, options *options) (any, error) {
 			fmt.Sprintf("maximum graph hops (1-%d, default %d)", protocol.MaxGraphDepth, protocol.DefaultMaxDepth))
 		optionalIntFlag(flags, "max-neighbors", &request.MaxNeighbors,
 			fmt.Sprintf("maximum neighbors per node (1-%d, default %d)", protocol.MaxGraphNeighbors, protocol.DefaultMaxNeighbors))
-		return dataCommand[protocol.QueryResult](flags, args, &scope, options, &request.Scope, &request)
+		path, err := options.parseDataRequest(flags, args, &scope, &request.Scope, &request)
+		if err != nil {
+			return parseError(flags, err)
+		}
+		matches, err := callDaemon[protocol.QueryResult](context.Background(), path, "query", request)
+		if err != nil {
+			return nil, err
+		}
+		if command == "graph" && !options.json {
+			return streamOutput(func(w io.Writer) error {
+				return writeGraph(w, request, matches)
+			}), nil
+		}
+		return matches, nil
 	default:
 		options.json = requestsJSON(flags, args, options.json)
 		return nil, invalid("Unknown command. Run bigbrain help for usage.")
@@ -365,32 +400,38 @@ func consolidateFlags(flags *flag.FlagSet, request *protocol.ConsolidateRequest)
 
 func dataCommand[R any](flags *flag.FlagSet, args []string, selection *scopeOptions,
 	options *options, scope *string, request interface{ Validate() error }) (any, error) {
-	if err := options.parseFlags(flags, args); err != nil {
+	path, err := options.parseDataRequest(flags, args, selection, scope, request)
+	if err != nil {
 		return parseError(flags, err)
+	}
+	return callDaemon[R](context.Background(), path, flags.Name(), request)
+}
+
+func (o *options) parseDataRequest(flags *flag.FlagSet, args []string, selection *scopeOptions,
+	scope *string, request interface{ Validate() error }) (string, error) {
+	if err := o.parseFlags(flags, args); err != nil {
+		return "", err
 	}
 	var err error
 	*scope, err = selection.resolve(flags)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	if err := request.Validate(); err != nil {
-		return nil, err
+		return "", err
 	}
-	path, err := databasePath(options.db)
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	return databasePath(o.db)
+}
+
+func callDaemon[R any](ctx context.Context, path, operation string, request any) (R, error) {
+	var result R
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	client, err := daemon.Connect(ctx, path, true)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		err = client.Call(ctx, operation, request, &result)
 	}
-	var result R
-	if err := client.Call(ctx, flags.Name(), request, &result); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return result, err
 }
 
 func lifecycle(command, db string) (any, error) {

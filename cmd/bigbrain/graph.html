@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>Memory graph · BigBrain</title>
+<style>
+* { box-sizing: border-box }
+body { margin: 0; background: #f6f7f4; color: #1d302e; font: 1rem/1.55 "Source Sans 3", system-ui, sans-serif }
+main { width: min(65rem, 100%); margin: auto; padding: clamp(1rem, 4vw, 3rem); overflow-wrap: anywhere }
+h1, h2, h3, p, dl, dd { margin: 0 }
+h1 { font-size: clamp(2.2rem, 6vw, 4rem); line-height: 1.1; letter-spacing: -.045em }
+h2, h3 { font-size: 1rem }
+code { font: .89em/1.5 "IBM Plex Mono", ui-monospace, monospace }
+dt, .meta { font-size: .87rem; color: #475d58 }
+a { color: #00695b; text-underline-offset: .2em }
+a:focus-visible, summary:focus-visible { outline: 2px solid #00695b; outline-offset: 2px }
+header { padding-bottom: 1.5rem }
+.query { margin: 1rem 0 .4rem; white-space: pre-wrap }
+.counts { display: flex; flex-wrap: wrap; gap: 1rem 2.5rem; padding: 1rem 0; border-block: 1px solid #c6d2cb }
+.counts dd { font-size: 1.3rem; font-weight: 650 }
+article { margin: 1.25rem 0; padding: clamp(1rem, 3vw, 1.7rem); border: 1px solid #d3dcd5; border-radius: .6rem; background: white; scroll-margin: 1rem }
+article:target { outline: 2px solid #147969 }
+.memory-text, .source { white-space: pre-wrap }
+.memory-text { margin: .8rem 0 }
+.explanation { margin-top: 1rem; padding-top: .8rem; border-top: 1px solid #e0e7e2 }
+.path { margin: .75rem 0 0; padding: 0; list-style: none }
+.path li + li { margin-top: 1rem }
+.route { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .65rem; margin: .3rem 0 }
+.node { max-width: 100%; border-radius: .3rem; padding: .25rem .6rem; background: #e7f2eb }
+.edge { max-width: 100%; color: #34534d }
+details { margin-top: .4rem }
+summary { cursor: pointer; color: #165b4e }
+.fields { display: grid; grid-template-columns: fit-content(34%) minmax(0, 1fr); gap: .2rem 1rem; margin: .55rem 0 }
+.empty { margin-top: 1.25rem }
+@media (max-width: 36rem) {
+  .route { align-items: flex-start; flex-direction: column }
+  .fields { display: block }
+  .fields dt:not(:first-child) { margin-top: .4rem }
+}
+</style>
+</head>
+<body>
+<main data-count="{{.Count}}" data-shown="{{len .Matches}}" data-node-count="{{.NodeCount}}" data-edge-count="{{.EdgeCount}}">
+<header>
+  <h1>Memory graph</h1>
+  <p class="query">{{if .Request.ID}}Memory ID <code>{{.Request.ID}}</code>{{else}}Query <strong>{{.Request.Text}}</strong>{{end}}</p>
+  <p>Scope <code>{{.Request.Scope}}</code>{{if .Request.IncludeGlobal}} + <code>global</code>{{end}}{{if not .Request.ID}} · Mode <code>{{or .Request.Mode "associative"}}</code>{{end}}</p>
+  {{with .Fallback}}<p class="meta">Retrieval fallback <code>{{.}}</code></p>{{end}}
+</header>
+<dl class="counts">
+  <div><dt>Matches shown</dt><dd>{{len .Matches}} of {{.Count}}</dd></div>
+  <div><dt>Nodes shown</dt><dd>{{.NodeCount}}</dd></div>
+  <div><dt>Relationships shown</dt><dd>{{.EdgeCount}}</dd></div>
+</dl>
+{{range .Matches}}
+<article id="memory-{{.ID}}" data-memory-id="{{.ID}}" data-source="{{.Source}}">
+  <p class="meta">{{with .Type}}{{.}} · {{end}}<code>{{.Scope}}</code></p>
+  <h2><code>{{.ID}}</code></h2>
+  <p class="memory-text">{{.Text}}</p>
+  <dl class="fields"><dt>Memory source</dt><dd class="source">{{.Source}}</dd></dl>
+  <section class="explanation">
+    <h3>Why this matched</h3>
+    <p>{{.Reason.Kind}}{{with .Reason.Terms}} · matched terms{{range .}} <code>{{.}}</code>{{end}}{{end}}</p>
+    {{if or .Reason.Score .Reason.BM25 .Reason.Cosine .Reason.GraphScore}}
+    <details><summary>Ranking signals</summary><dl class="fields">
+      {{with .Reason.Score}}<dt>Score</dt><dd>{{.}}</dd>{{end}}
+      {{with .Reason.BM25}}<dt>BM25</dt><dd>{{.}}</dd>{{end}}
+      {{with .Reason.Cosine}}<dt>Cosine similarity</dt><dd>{{.}}</dd>{{end}}
+      {{with .Reason.GraphScore}}<dt>Graph score</dt><dd>{{.}}</dd>{{end}}
+    </dl></details>{{end}}
+    {{if .Steps}}
+    <ol class="path" aria-label="Retrieval path">
+    {{range .Steps}}
+      <li data-step="{{.Number}}" data-relationship-id="{{.RelationshipID}}" data-direction="{{.Direction}}" data-from-id="{{.FromID}}" data-to-id="{{.ToID}}" data-travel-from="{{.TravelFrom}}" data-travel-to="{{.TravelTo}}" data-source="{{.Source}}">
+        <p class="meta">Hop {{.Number}} · {{.Direction}} traversal</p>
+        <div class="route">
+          <span class="node">{{if index $.Returned .TravelFrom}}<a href="#memory-{{.TravelFrom}}"><code>{{.TravelFrom}}</code></a>{{else}}<code>{{.TravelFrom}}</code>{{end}}</span>
+          <span class="edge">→ via {{.Kind}} →</span>
+          <span class="node">{{if index $.Returned .TravelTo}}<a href="#memory-{{.TravelTo}}"><code>{{.TravelTo}}</code></a>{{else}}<code>{{.TravelTo}}</code>{{end}}</span>
+        </div>
+        <details><summary>Stored direction and source</summary>
+        <dl class="fields">
+          <dt>Stored direction</dt><dd><code>{{.FromID}}</code> → {{.Kind}} → <code>{{.ToID}}</code></dd>
+          <dt>Relationship</dt><dd><code>{{.RelationshipID}}</code></dd>
+          <dt>Scope</dt><dd><code>{{.Scope}}</code></dd>
+          <dt>Relationship source</dt><dd class="source">{{.Source}}</dd>
+          <dt>Weight</dt><dd>{{.Weight}}</dd>
+          {{with .Confidence}}<dt>Confidence</dt><dd>{{.}}</dd>{{end}}
+          {{with .ActivationCount}}<dt>Activations</dt><dd>{{.}}</dd>{{end}}
+          {{with .LastActivatedAt}}<dt>Last activated</dt><dd>{{.}}</dd>{{end}}
+        </dl></details>
+      </li>
+    {{end}}
+    </ol>
+    {{end}}
+  </section>
+</article>
+{{else}}<p class="empty">No matching memories in this scope.</p>{{end}}
+</main>
+</body>
+</html>
