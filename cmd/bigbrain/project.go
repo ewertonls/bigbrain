@@ -43,11 +43,10 @@ func (s scopeOptions) resolve(flags *flag.FlagSet) (string, error) {
 	return "", protocol.NewError("INVALID_SCOPE", "Choose --global, --current-project, or --project with a valid project ID.")
 }
 
-func projectCommand(args []string) (any, error) {
-	if len(args) != 2 || args[0] != "init" || !protocol.ValidProjectID(args[1]) {
+func initProject(id string) (any, error) {
+	if !protocol.ValidProjectID(id) {
 		return nil, invalid("Run bigbrain project init ID with a project ID of up to 128 ASCII letters, digits, dots, underscores, or hyphens, starting with a letter or digit.")
 	}
-	id := args[1]
 	path, err := projectFile()
 	if err != nil {
 		return nil, err
