@@ -12,7 +12,7 @@ import (
 
 func TestToolCallsPreserveCLIContract(t *testing.T) {
 	calls := 0
-	server := NewServer(func(_ context.Context, name string, in any) (json.RawMessage, error) {
+	server := NewServer("", func(_ context.Context, name string, in any) (json.RawMessage, error) {
 		calls++
 		switch req := in.(type) {
 		case protocol.QueryRequest:

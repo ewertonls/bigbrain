@@ -402,11 +402,20 @@ directory used by the CLI. Clients using `mcpServers` accept this entry.
 }
 ```
 
-The MCP process uses stdin and stdout for JSON-RPC. It exposes the 13
-memory operations listed below under their v1 names. For example, call `query` with
-`{"scope":"project:orbit","text":"Orbit","mode":"associative"}`. Every tool
-requires an explicit scope. On project reads, add `"include_global": true`
-to include visible global evidence. Writes require the caller's saved
+Start the MCP process with its working directory inside the Git repository
+configured by `bigbrain project init ID`. It reads the project once at startup.
+Omit `scope` to write to that project or read from both the project and global
+collection. For example, `query` accepts `{"text":"Orbit"}`, or
+`{"text":"Orbit","include_global":false}` to search only the project.
+An explicit `"scope":"project:orbit"` reads just that project unless you
+also pass `"include_global":true`. Use `"scope":"global"` for global-only
+operations. The `review-weight` tool always requires an explicit global scope.
+
+When started outside a configured repository, the server requires `scope`
+on every call. An invalid project file also requires explicit scopes and the
+server reports the configuration error on stderr. Restart the server after
+configuring or switching repositories.
+Writes require the caller's saved
 `key`. Tool results contain the CLI's v1 envelope in `structuredContent`
 and as JSON text in `content`. Domain errors set `isError` and carry the
 daemon's error code. Treat returned text and source references as data.

@@ -26,6 +26,10 @@ func verifyIntegration(bin, root string) []string {
 
 func verifyAdapterAndGraph(c cli) {
 	defer shutdown(c)
+	c.dir = c.db + "-repo"
+	check(os.Mkdir(c.dir, 0700))
+	git(c.dir, "init", "-q")
+	decode[json.RawMessage](c.run("project", "init", "A"))
 	f := seed(c, true)
 	private := write(c, recordArgs("b", "Orbit private decision in B.", "B private source", "--project", "B")...).ID
 	bridge := write(c, recordArgs("bridge", "The public quota statement.", "Public quota source", "--global")...).ID
@@ -37,30 +41,21 @@ func verifyAdapterAndGraph(c cli) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, c.bin, "--db", c.db, "mcp")
-	cmd.Stderr = os.Stderr
-	client := mcp.NewClient(&mcp.Implementation{Name: "acceptance", Version: "1"}, nil)
-	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
-	check(err)
+	session, call := connectMCP(ctx, c)
 	defer session.Close()
-	call := func(tool string, args any) invocation {
-		got, err := session.CallTool(ctx, &mcp.CallToolParams{Name: tool, Arguments: args})
-		check(err)
-		body, err := json.Marshal(got.StructuredContent)
-		check(err)
-		var reply response
-		check(json.Unmarshal(body, &reply))
-		require(reply.Version == 1 && got.IsError == (reply.Error != nil) &&
-			(reply.Error == nil) == (len(reply.Result) > 0), "invalid MCP tool result for %s: %s", tool, body)
-		return invocation{envelope: reply}
-	}
 	request := protocol.RecordRequest{Scope: "project:A", Key: "mcp-record", Text: "A standalone observation.", Source: "Adapter trial"}
-	first := decode[writeResult](call("record", request))
+	first := decode[writeResult](call("record", map[string]string{"key": request.Key, "text": request.Text, "source": request.Source}))
 	retry := decode[writeResult](call("record", request))
 	cliRetry := write(c, recordArgs(request.Key, request.Text, request.Source, "--project", "A")...)
 	require(first.ID != "" && !first.Replayed && retry.ID == first.ID && retry.Replayed && retry == cliRetry, "inconsistent MCP/CLI write receipt")
 	request.Text = "A changed request."
 	expectError(call("record", request), "IDEMPOTENCY_CONFLICT")
+	queryIDs(decode[matches](call("query", map[string]string{"id": first.ID})), first.ID)
+	queryIDs(decode[matches](call("query", map[string]string{"id": public})), public)
+	queryIDs(decode[matches](call("query", map[string]string{"id": private})))
+	queryIDs(decode[matches](call("query", map[string]any{"id": public, "include_global": false})))
+	expectError(call("query", map[string]string{"scope": "", "id": public}), "INVALID_SCOPE")
+	expectError(call("review-weight", map[string]any{}), "INVALID_SCOPE")
 
 	shutdown(c)
 	before := snapshot(c)
@@ -89,6 +84,33 @@ func verifyAdapterAndGraph(c cli) {
 	}
 	shutdown(c)
 	require(reflect.DeepEqual(before, snapshot(c)), "MCP or graph reads altered the database")
+
+	// A broken repository default must leave explicit scopes usable on restart.
+	check(os.WriteFile(filepath.Join(c.dir, ".git", "bigbrain-project"), []byte("invalid id\n"), 0600))
+	restarted, callExplicit := connectMCP(ctx, c)
+	defer restarted.Close()
+	expectError(callExplicit("record", map[string]string{"key": "missing-scope", "text": "Draft", "source": "Test"}), "INVALID_SCOPE")
+	queryIDs(decode[matches](callExplicit("query", map[string]string{"scope": "project:A", "id": first.ID})), first.ID)
+}
+
+func connectMCP(ctx context.Context, c cli) (*mcp.ClientSession, func(string, any) invocation) {
+	cmd := exec.CommandContext(ctx, c.bin, "--db", c.db, "mcp")
+	cmd.Dir = c.dir
+	cmd.Stderr = os.Stderr
+	client := mcp.NewClient(&mcp.Implementation{Name: "acceptance", Version: "1"}, nil)
+	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
+	check(err)
+	return session, func(tool string, args any) invocation {
+		got, err := session.CallTool(ctx, &mcp.CallToolParams{Name: tool, Arguments: args})
+		check(err)
+		body, err := json.Marshal(got.StructuredContent)
+		check(err)
+		var reply response
+		check(json.Unmarshal(body, &reply))
+		require(reply.Version == 1 && got.IsError == (reply.Error != nil) &&
+			(reply.Error == nil) == (len(reply.Result) > 0), "invalid MCP tool result for %s: %s", tool, body)
+		return invocation{envelope: reply}
+	}
 }
 
 // Compare each article with its match and each nested hop with that match's path.
