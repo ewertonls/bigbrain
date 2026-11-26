@@ -20,7 +20,6 @@ func verifyScopes(c cli, f fixture) {
 	projectB := write(c, recordArgs("b", "Orbit project B private text.", "Private B source", "--project", "B")...).ID
 	global := write(c, recordArgs("g", "Orbit shared text after review.", "Public review", "--global")...).ID
 	require(global != f.decision, "global copy shares its private origin's ID")
-	expectError(c.run("query", "--text", "Orbit"), "INVALID_SCOPE")
 	queryIDs(queryText(c, "Orbit", "associative", "3", "--project", "A"), f.decision, f.evidence)
 	queryIDs(queryText(c, "Orbit", "associative", "3", "--project", "B"), projectB)
 	queryIDs(queryText(c, "Orbit", "associative", "3", "--global"), global)
@@ -70,11 +69,19 @@ func verifyWorktrees(c cli, root string) {
 	git(first, "-c", "user.name=Foundation Test", "-c", "user.email=foundation@example.test", "commit", "-q", "--allow-empty", "-m", "Create fixture")
 	git(first, "worktree", "add", "-q", "-b", "second", second)
 	c.dir = first
+	expectError(c.run(recordArgs("unconfigured", decisionText, "Decision 12")...), "PROJECT_NOT_CONFIGURED")
 	decode[json.RawMessage](c.run("project", "init", "A"))
-	decision := write(c, recordArgs("worktree-d1", decisionText, "Decision 12", "--current-project")...)
+	decision := write(c, recordArgs("worktree-d1", decisionText, "Decision 12")...)
+	shared := write(c, recordArgs("worktree-global", "Shared practice", "Guide", "--global")...)
+	other := write(c, recordArgs("worktree-other", "Other project", "Notes", "--project", "B")...)
 	c.dir = second
-	fromSecond := query(c, "--id", decision.ID, "--current-project")
+	fromSecond := query(c, "--id", decision.ID)
 	queryIDs(fromSecond, decision.ID)
+	require(fromSecond.Items[0].Scope == "project:A", "default write selected %s", fromSecond.Items[0].Scope)
+	queryIDs(query(c, "--id", shared.ID), shared.ID)
+	queryIDs(query(c, "--id", other.ID))
+	queryIDs(query(c, "--id", shared.ID, "--include-global=false"))
+	queryIDs(query(c, "--id", shared.ID, "--current-project"))
 	require(fromSecond.Items[0].Source == "Decision 12", "original source failed to carry across worktrees")
 	shutdown(c)
 }

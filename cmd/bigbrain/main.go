@@ -51,9 +51,10 @@ type options struct {
 }
 
 type scopeOptions struct {
-	project string
-	current bool
-	global  bool
+	project    string
+	current    bool
+	global     bool
+	readGlobal *bool
 }
 
 type projectResult struct {
@@ -266,7 +267,7 @@ func execute(args []string, options *options) (any, error) {
 	case "feedback-history":
 		var request protocol.FeedbackHistoryRequest
 		flags.StringVar(&request.RelationshipID, "relationship", "", "relationship ID")
-		flags.BoolVar(&request.IncludeGlobal, "include-global", false, "include global relationships and reviews")
+		scope.readGlobalFlag(flags, &request.IncludeGlobal)
 		flags.IntVar(&request.Limit, "limit", protocol.DefaultQueryLimit, "maximum events per page")
 		flags.StringVar(&request.After, "after", "", "event cursor from the previous page")
 		return dataCommand[protocol.FeedbackHistoryResult](flags, args, &scope, options, &request.Scope, &request)
@@ -287,7 +288,7 @@ func execute(args []string, options *options) (any, error) {
 	case "history":
 		var request protocol.HistoryRequest
 		flags.StringVar(&request.ID, "id", "", "memory ID (required)")
-		flags.BoolVar(&request.IncludeGlobal, "include-global", false, "include visible global records")
+		scope.readGlobalFlag(flags, &request.IncludeGlobal)
 		flags.IntVar(&request.Limit, "limit", protocol.DefaultQueryLimit, "maximum related records per page")
 		flags.StringVar(&request.After, "after", "", "relationship cursor from the previous page")
 		return dataCommand[protocol.HistoryResult](flags, args, &scope, options, &request.Scope, &request)
@@ -297,7 +298,7 @@ func execute(args []string, options *options) (any, error) {
 		flags.StringVar(&request.ID, "id", "", "memory ID")
 		flags.StringVar(&request.Mode, "mode", "hybrid", "retrieval mode: hybrid, text or associative")
 		flags.IntVar(&request.Limit, "limit", protocol.DefaultQueryLimit, "maximum results")
-		flags.BoolVar(&request.IncludeGlobal, "include-global", false, "include global records")
+		scope.readGlobalFlag(flags, &request.IncludeGlobal)
 		optionalIntFlag(flags, "max-depth", &request.MaxDepth,
 			fmt.Sprintf("maximum graph hops (1-%d, default %d)", protocol.MaxGraphDepth, protocol.DefaultMaxDepth))
 		optionalIntFlag(flags, "max-neighbors", &request.MaxNeighbors,
@@ -545,14 +546,14 @@ func helpText(flags *flag.FlagSet) string {
 		fmt.Fprintf(&out, "Usage: bigbrain %s [flags]\n", flags.Name())
 	}
 	if projectOnlyCommand(flags.Name()) {
-		out.WriteString("\nChoose -project ID or -current-project.\n")
+		out.WriteString("\nUse the configured project by default, or select -project ID.\n")
 		if flags.Name() == "consolidate" {
 			out.WriteString("For an external proposal, supply -text, -applies-when, -rationale, and -producer together.\n")
 		}
 	} else if flags.Name() == "review-weight" {
 		out.WriteString("\nChoose -global for this reviewed write.\n")
 	} else if flags.Lookup("project") != nil {
-		out.WriteString("\nChoose exactly one scope: -project ID, -current-project, or -global.\n")
+		out.WriteString("\nUse the configured project by default. Select a scope with -project ID, -current-project, or -global.\n")
 	}
 	out.WriteString("\nFlags:\n")
 	output := flags.Output()

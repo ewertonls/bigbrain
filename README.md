@@ -55,7 +55,7 @@ owned by your account and private to it. `bigbrain status` checks the daemon
 and `bigbrain shutdown` waits for it to finish. Startup and runtime diagnostics
 are written to `daemon.log` in the database directory.
 
-Run `bigbrain db-path --current-project` to print the absolute path to
+In a configured repository, run `bigbrain db-path` to print the absolute path to
 `memory.lbug`. You can also select `--project ID` or `--global`. All scopes
 in the selected database directory share this file. The command works before
 the first write and while the daemon is stopped.
@@ -75,8 +75,8 @@ Use `bigbrain help` to list commands. Run `bigbrain query -h` or
 From a configured project, import its documentation and search the imported text:
 
 ```sh
-bigbrain import docs/ --current-project
-bigbrain query --current-project --mode text --text "deployment"
+bigbrain import docs/
+bigbrain query --mode text --text "deployment"
 ```
 
 Use `--project ID` to name the destination directly or `--global` to import into the
@@ -99,18 +99,18 @@ files processed (`files`), new memories (`created`) and existing ones (`replayed
 ```sh
 bigbrain project init orbit
 
-bigbrain --json record --current-project --key orbit-decision-12 \
+bigbrain --json record --key orbit-decision-12 \
   --type decision --text 'Orbit sends readings in batches.' --source 'Decision 12'
-bigbrain --json record --current-project --key orbit-test-7 \
+bigbrain --json record --key orbit-test-7 \
   --type observation --text 'The receiver accepts only one request per minute.' --source 'Test 7'
 
 # Substitute the two IDs returned by record.
-bigbrain --json link --current-project --key orbit-review-12 \
+bigbrain --json link --key orbit-review-12 \
   --from DECISION_ID --to EVIDENCE_ID --type justified_by --weight 1 \
   --source 'Review of Decision 12'
 
 bigbrain shutdown
-bigbrain --json query --current-project --text Orbit --limit 2
+bigbrain --json query --text Orbit --limit 2
 ```
 
 The optional `record --type` accepts `semantic`, `episodic`, `procedural`,
@@ -128,10 +128,17 @@ Older links omit attributes that were never recorded. Reading a link leaves
 its attributes intact.
 
 `project init` stores the chosen ID in the Git common directory, so separate
-worktrees share it. Every data command requires a scope. Use
-`--project ID` for a specific project or `--global` to select the global
-collection. Use `publish` to share a reviewed lesson from a project. A project query includes
-global memories when passed `--include-global`. Use the project scope to
+worktrees share it. Once configured, CLI writes such as `record` and
+`import` default to that project. Reads (`query`, `graph`, `history`, and
+`feedback-history`) include the configured project and the global collection.
+Use `--include-global=false` to read only the configured project.
+
+An explicit `--current-project` or `--project ID` selects just that project
+unless you add `--include-global` on a read. Use `--global` to select the
+global collection directly. Without a configured project, supply a scope or
+run `bigbrain project init ID` in the repository.
+
+Use `publish` to share a reviewed lesson from a project. Use the project scope to
 link a project memory to a global memory in either direction. The project
 owns the relationship. Both endpoints and the relationship must be visible
 for a query to return its path, source or ranking contribution.
@@ -217,8 +224,8 @@ run locally. [GloVe model and license](https://nlp.stanford.edu/projects/glove/)
 
 ## Propose a project lesson
 
-`consolidate` creates a `lesson_proposal` in the project selected with
-`--project ID` or `--current-project`. Pass
+`consolidate` creates a `lesson_proposal` in the configured project or the project
+selected with `--project ID`. Pass
 `--evidence ID` once for each of 1–100 distinct original memories. Any
 original memory type is eligible while active in that project. The originals
 remain queryable, and each has a `derived_from` link from the proposal.

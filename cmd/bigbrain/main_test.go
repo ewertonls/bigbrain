@@ -15,6 +15,7 @@ import (
 
 func TestDBPathBeforeFirstWrite(t *testing.T) {
 	data := t.TempDir()
+	t.Chdir(data)
 	t.Setenv("XDG_DATA_HOME", data)
 	dir := filepath.Join(data, "bigbrain")
 	file := filepath.Join(dir, "memory.lbug")
@@ -36,11 +37,18 @@ func TestDBPathBeforeFirstWrite(t *testing.T) {
 	if reply.Version != protocol.Version || reply.Result != (databaseLocation{"global", dir, file}) {
 		t.Fatalf("unexpected location: %+v", reply)
 	}
-	for _, flags := range [][]string{nil, {"--project", "orbit", "--global"}} {
-		_, err := execute(append([]string{"db-path"}, flags...), &options{})
+	for _, tc := range []struct {
+		flags []string
+		code  string
+	}{
+		{nil, "PROJECT_UNAVAILABLE"},
+		{[]string{"--project", "orbit", "--global"}, "INVALID_SCOPE"},
+		{[]string{"--project="}, "INVALID_SCOPE"},
+	} {
+		_, err := execute(append([]string{"db-path"}, tc.flags...), &options{})
 		var scopeErr *protocol.Error
-		if !errors.As(err, &scopeErr) || scopeErr.Code != "INVALID_SCOPE" {
-			t.Fatalf("expected scope error for %v, got %v", flags, err)
+		if !errors.As(err, &scopeErr) || scopeErr.Code != tc.code {
+			t.Fatalf("expected %s for %v, got %v", tc.code, tc.flags, err)
 		}
 	}
 	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {

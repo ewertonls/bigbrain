@@ -15,6 +15,11 @@ import (
 	"github.com/ewertonls/bigbrain/internal/protocol"
 )
 
+var (
+	errProjectUnavailable   = protocol.NewError("PROJECT_UNAVAILABLE", "Run this command in a Git worktree, or supply --project ID explicitly.")
+	errProjectNotConfigured = protocol.NewError("PROJECT_NOT_CONFIGURED", "Run bigbrain project init ID in this worktree.")
+)
+
 func projectOnlyCommand(name string) bool {
 	switch name {
 	case "consolidate", "publish", "feedback", "forget", "reconcile":
@@ -23,32 +28,36 @@ func projectOnlyCommand(name string) bool {
 	return false
 }
 
+func (s *scopeOptions) readGlobalFlag(flags *flag.FlagSet, dest *bool) {
+	s.readGlobal = dest
+	flags.BoolVar(dest, "include-global", false, "include global records (enabled when scope is omitted)")
+}
+
 func (s scopeOptions) resolve(flags *flag.FlagSet) (string, error) {
-	explicit := false
-	flags.Visit(func(f *flag.Flag) {
-		explicit = explicit || f.Name == "project"
-	})
-	if flags.Name() == "review-weight" && (!s.global || explicit || s.current) {
+	supplied := make(map[string]bool)
+	flags.Visit(func(f *flag.Flag) { supplied[f.Name] = true })
+	projectFlag := supplied["project"]
+	implicit := !projectFlag && !supplied["current-project"] && !supplied["global"]
+	if flags.Name() == "review-weight" && (!s.global || projectFlag || s.current) {
 		return "", protocol.NewError("INVALID_SCOPE", "Choose --global for a reviewed global weight change.")
 	}
-	if s.current && !explicit && !s.global {
-		path, err := projectFile()
+	if implicit || (s.current && !projectFlag && !s.global) {
+		scope, err := configuredProjectScope()
 		if err != nil {
 			return "", err
 		}
-		id, err := readProject(path)
-		if err != nil {
-			return "", err
+		if implicit && !supplied["include-global"] && s.readGlobal != nil {
+			*s.readGlobal = true
 		}
-		return "project:" + id, nil
+		return scope, nil
 	}
-	if explicit && !s.current && !s.global && protocol.ValidProjectID(s.project) {
+	if projectFlag && !s.current && !s.global && protocol.ValidProjectID(s.project) {
 		return "project:" + s.project, nil
 	}
 	if projectOnlyCommand(flags.Name()) {
 		return "", protocol.NewError("INVALID_SCOPE", "Choose --project ID or --current-project for "+flags.Name()+".")
 	}
-	if s.global && !explicit && !s.current {
+	if s.global && !projectFlag && !s.current {
 		return "global", nil
 	}
 	return "", protocol.NewError("INVALID_SCOPE", "Choose exactly one of --global, --current-project, or --project with a valid project ID.")
@@ -68,13 +77,25 @@ func initProject(id string) (any, error) {
 	return projectResult{ID: id}, nil
 }
 
+func configuredProjectScope() (string, error) {
+	path, err := projectFile()
+	if err != nil {
+		return "", err
+	}
+	id, err := readProject(path)
+	if err != nil {
+		return "", err
+	}
+	return "project:" + id, nil
+}
+
 func projectFile() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--path-format=absolute", "--git-common-dir")
 	output, err := cmd.Output()
 	if err != nil {
-		return "", protocol.NewError("PROJECT_UNAVAILABLE", "Run this command in a Git worktree, or supply --project ID explicitly.")
+		return "", errProjectUnavailable
 	}
 	dir := string(bytes.TrimSuffix(output, []byte("\n")))
 	if !filepath.IsAbs(dir) {
@@ -86,7 +107,7 @@ func projectFile() (string, error) {
 func readProject(path string) (string, error) {
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return "", protocol.NewError("PROJECT_NOT_CONFIGURED", "Run bigbrain project init ID in this worktree.")
+		return "", errProjectNotConfigured
 	}
 	if err != nil {
 		return "", projectConfigError()
