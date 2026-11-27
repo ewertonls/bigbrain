@@ -70,7 +70,7 @@ func initProject(id string) (any, error) {
 	if !protocol.ValidProjectID(id) {
 		return nil, invalid("Run bigbrain project init ID with a project ID of up to 128 ASCII letters, digits, dots, underscores, or hyphens, starting with a letter or digit.")
 	}
-	path, err := gitProjectFile()
+	path, err := gitProjectFile(context.Background(), ".")
 	if err != nil {
 		return nil, err
 	}
@@ -84,18 +84,9 @@ func initProject(id string) (any, error) {
 }
 
 func configuredProjectScope() (string, error) {
-	path, err := gitProjectFile()
+	path, _, err := projectConfig(context.Background(), ".")
 	if err != nil {
 		return "", err
-	}
-	if path == "" {
-		path, err = findAncestorFile(localProjectFile)
-		if err != nil {
-			return "", err
-		}
-		if path == "" {
-			return "", errProjectUnavailable
-		}
 	}
 	id, err := readProject(path)
 	if err != nil {
@@ -105,14 +96,27 @@ func configuredProjectScope() (string, error) {
 }
 
 // An empty path selects directory-based configuration outside Git.
-func gitProjectFile() (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func projectConfig(ctx context.Context, cwd string) (string, bool, error) {
+	path, err := gitProjectFile(ctx, cwd)
+	if err != nil || path != "" {
+		return path, true, err
+	}
+	path, err = findAncestorFile(cwd, localProjectFile)
+	if err == nil && path == "" {
+		err = errProjectUnavailable
+	}
+	return path, false, err
+}
+
+func gitProjectFile(ctx context.Context, cwd string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--path-format=absolute", "--git-common-dir")
+	cmd.Dir = cwd
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	output, err := cmd.Output()
 	if errors.Is(err, exec.ErrNotFound) {
-		marker, err := findAncestorFile(".git")
+		marker, err := findAncestorFile(cwd, ".git")
 		if err != nil {
 			return "", err
 		}
@@ -139,8 +143,8 @@ func gitProjectFile() (string, error) {
 	return filepath.Join(dir, "bigbrain-project"), nil
 }
 
-func findAncestorFile(name string) (string, error) {
-	dir, err := os.Getwd()
+func findAncestorFile(cwd, name string) (string, error) {
+	dir, err := filepath.Abs(cwd)
 	if err != nil {
 		return "", err
 	}

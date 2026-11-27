@@ -2,7 +2,7 @@
 kadai: task
 id: "BB-0038"
 title: "Bind plugin sessions to a project and diagnose setup"
-status: "todo"
+status: "done"
 parent: BB-0034
 depends_on: [BB-0037]
 ---
@@ -14,3 +14,13 @@ Reuse the [project resolver](../../cmd/bigbrain/project.go), [CLI discovery comm
 - Bound project reads explicitly send the project and `include_global: true` by default. Demonstrate project-only reads and global-only reads with `include_global: false`. Write destinations stay explicit.
 - Put shared helper state under `$XDG_STATE_HOME/bigbrain/codex` (fallback `~/.local/state/bigbrain/codex`) or an explicit override, with private directories/files (0700/0600). Both plugins can point to it from their own plugin data directories. Use validated or hashed identifiers for filenames.
 - Diagnostics distinguish a missing binary/library, incompatible daemon, unresolved project and unsupported host without exposing stored content.
+
+<!-- kadai:log:start -->
+
+## Log
+
+### 2026-11-27T02:03:35-03:00
+
+Verified worktree project identity, separate physical workspace keys, global-only scope and missing-binding failure in targeted Go tests. Simple-code review reused the CLI project resolver and daemon status discovery, and wired shared state.path through the installed launcher.
+
+<!-- kadai:log:end -->

@@ -13,4 +13,8 @@ if [ ! -f "$executable" ] || [ ! -x "$executable" ]; then
     echo "Configured BigBrain executable is unavailable." >&2
     exit 1
 fi
+if [ -f "$data/state.path" ]; then
+    IFS= read -r BIGBRAIN_CODEX_STATE < "$data/state.path" || exit 1
+    export BIGBRAIN_CODEX_STATE
+fi
 exec "$executable" "$@"

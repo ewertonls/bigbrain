@@ -36,6 +36,7 @@ Commands:
   invalidate       Hide a memory and preserve its history.
   history          Inspect a memory and its visible relationships.
   delete           Delete a memory and its incident relationships.
+  plugin doctor    Inspect the Codex binding and local runtime.
   db-path          Print the absolute path to the shared database file.
   project init ID  Save the project ID for this directory or Git repository.
   status           Show the daemon state.
@@ -160,8 +161,8 @@ func execute(args []string, options *options) (any, error) {
 		}
 		command, args = global.Arg(0), global.Args()[1:]
 		var topic []string
-		if command == "project" && len(args) > 0 && args[0] == "init" {
-			topic, args = []string{"init"}, args[1:]
+		if len(args) > 0 && ((command == "project" && args[0] == "init") || (command == "plugin" && args[0] == "doctor")) {
+			topic, args = args[:1], args[1:]
 		}
 		if err := options.parseFlags(global, args); err != nil {
 			return parseError(global, err)
@@ -173,6 +174,8 @@ func execute(args []string, options *options) (any, error) {
 	switch command {
 	case "help":
 		return helpText(flags), nil
+	case "plugin":
+		return pluginCommand(options, args)
 	case "mcp":
 		if err := options.parseFlags(flags, args); err != nil {
 			return parseError(flags, err)
