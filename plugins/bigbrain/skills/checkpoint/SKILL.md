@@ -19,3 +19,6 @@ on stdin. Use the actual host session identifier. For example:
 
 Use `handoff list` in the same session. Edits and dismissals require the draft
 ID and the revision last reviewed. Staging preserves the draft immediately.
+After review, run `bigbrain handoff save --session SESSION --id ID --revision N`.
+If acknowledgement is lost, repeat the same command. Confirm each item in the
+result before telling the user a handoff was saved.

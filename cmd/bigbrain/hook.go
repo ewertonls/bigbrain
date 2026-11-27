@@ -56,7 +56,8 @@ func runPluginHook(db string, in io.Reader, out io.Writer) error {
 	return json.NewEncoder(out).Encode(response)
 }
 func hookRecall(ctx context.Context, start time.Time, db string, e hookEvent) string {
-	if e.Event != "SessionStart" || (e.Source != "startup" && e.Source != "resume" && e.Source != "compact") || e.Session == "" || !filepath.IsAbs(e.Cwd) {
+	flush := e.Event == "Stop" || e.Event == "PreCompact"
+	if (!flush && (e.Event != "SessionStart" || (e.Source != "startup" && e.Source != "resume" && e.Source != "compact"))) || e.Session == "" || !filepath.IsAbs(e.Cwd) {
 		return ""
 	}
 	p := pluginOptions{cwd: e.Cwd, session: e.Session, agent: e.Agent, include: true, state: os.Getenv("BIGBRAIN_CODEX_STATE")}
@@ -69,7 +70,22 @@ func hookRecall(ctx context.Context, start time.Time, db string, e hookEvent) st
 		return ""
 	}
 	policy, err := readState[sessionPolicy](b.sessionFile(dir, "policy"))
-	if err != nil || policy.Paused || (e.Source == "compact" && policy.DisableCompact) || (e.Source != "compact" && policy.DisableStartup) {
+	if err != nil || policy.Paused {
+		return ""
+	}
+	if flush {
+		ds, err := readState[drafts](b.sessionFile(dir, "drafts"))
+		if err == nil {
+			for _, d := range ds {
+				if d.Manifest != nil && d.Status != "saved" {
+					_, _ = saveHandoff(ctx, b, dir, d.ID, d.Revision, false)
+					break
+				}
+			}
+		}
+		return ""
+	}
+	if (e.Source == "compact" && policy.DisableCompact) || (e.Source != "compact" && policy.DisableStartup) {
 		return ""
 	}
 	b.IncludeGlobal = !policy.ProjectOnly

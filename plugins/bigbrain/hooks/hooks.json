@@ -1,8 +1,39 @@
 {
   "hooks": {
-    "SessionStart": [{
-      "matcher": "startup|resume|compact",
-      "hooks": [{"type":"command","command":"\"${PLUGIN_ROOT}/scripts/session-hook\"","timeout":3,"additionalContextLimit":2500}]
-    }]
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/scripts/session-hook\"",
+            "timeout": 3,
+            "additionalContextLimit": 2500
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/scripts/session-hook\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/scripts/session-hook\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
   }
 }

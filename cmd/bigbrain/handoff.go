@@ -29,11 +29,12 @@ type draftContent struct {
 	NextSteps     []string        `json:"next_steps,omitempty"`
 }
 type handoffDraft struct {
-	ID       string       `json:"id"`
-	Revision int          `json:"revision"`
-	Status   string       `json:"status"`
-	Origin   binding      `json:"origin"`
-	Content  draftContent `json:"content"`
+	Manifest *frozenHandoff `json:"manifest,omitempty"`
+	ID       string         `json:"id"`
+	Revision int            `json:"revision"`
+	Status   string         `json:"status"`
+	Origin   binding        `json:"origin"`
+	Content  draftContent   `json:"content"`
 }
 type drafts []handoffDraft
 
@@ -154,6 +155,9 @@ func handoffCommand(o *options, args []string) (any, error) {
 		return nil, err
 	}
 	path := b.sessionFile(dir, "drafts")
+	if action == "save" {
+		return saveHandoff(ctx, b, dir, *id, *revision, true)
+	}
 	if action == "list" {
 		ds, err := readState[drafts](path)
 		if ds == nil {

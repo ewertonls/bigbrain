@@ -490,16 +490,24 @@ func locateDatabase(scope, override string) (databaseLocation, error) {
 	if err != nil {
 		return databaseLocation{}, err
 	}
-	// Match the daemon's physical directory when it already exists. A fresh
-	// checkout can also inspect its configured path before the first write.
-	if physical, err := filepath.EvalSymlinks(dir); err == nil {
-		dir = physical
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return databaseLocation{}, protocol.NewError("DATABASE_UNAVAILABLE", err.Error())
-	}
+	// Resolve the existing prefix so a new database keeps the same binding
+	// after its directory is created beneath a symlink (e.g. /tmp on macOS).
 	dir, err = filepath.Abs(dir)
 	if err != nil {
-		return databaseLocation{}, protocol.NewError("DATABASE_UNAVAILABLE", err.Error())
+		return databaseLocation{}, err
+	}
+	prefix := dir
+	for {
+		physical, e := filepath.EvalSymlinks(prefix)
+		if e == nil {
+			suffix, _ := filepath.Rel(prefix, dir)
+			dir = filepath.Join(physical, suffix)
+			break
+		}
+		if !errors.Is(e, os.ErrNotExist) || filepath.Dir(prefix) == prefix {
+			return databaseLocation{}, protocol.NewError("DATABASE_UNAVAILABLE", e.Error())
+		}
+		prefix = filepath.Dir(prefix)
 	}
 	return databaseLocation{Scope: scope, Directory: dir, DatabaseFile: daemon.DatabaseFile(dir)}, nil
 }
