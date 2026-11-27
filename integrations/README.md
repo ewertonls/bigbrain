@@ -58,8 +58,7 @@ Open `"$executable" ui --session SESSION_ID` using the printed URL in a local
 browser. Within Codex the CLI defaults to `CODEX_THREAD_ID` when set. The URL
 contains a per-launch secret. Search, review and automation run entirely on
 loopback; no Node runtime or MCP companion is required. End the foreground
-viewer with Ctrl-C. An optional embedded surface requires a separate host
-capability check.
+viewer with Ctrl-C. The optional [desktop Explorer panel](#open-explorer-beside-a-desktop-conversation) uses a separate read-only MCP registration.
 
 To update, finish outstanding work, shut down the old daemon with the old
 binary and its original DB selection, then replace the entire native package.
@@ -73,3 +72,22 @@ Use the client's plugin controls to disable BigBrain, or remove the package
 with `codex plugin remove bigbrain@bigbrain-local`. Verify in a new session
 that its hooks are absent. Removal preserves the separately installed native
 binary, canonical database, pending drafts and frozen retry manifests.
+
+### Open Explorer beside a desktop conversation
+
+The optional read-only MCP server serves the same Explorer as the local browser.
+Build the native package with `make package-macos-arm64`. From the initialized
+BigBrain project, register an absolute executable and workspace:
+
+```sh
+codex mcp add bigbrain-explorer -- "$executable" mcp --explorer-workspace "$PWD"
+```
+
+For a separate database, insert `--db /absolute/path/to/db` before `mcp`.
+The registration pins the workspace even when the desktop client launches MCP
+from a cache directory. The project name is visible in the scope selector.
+
+Open the conversation's panel picker and select **BigBrain Explorer**. Search
+for a decision, select the result and inspect **Source**. **View history**
+shows its visible relationships. To disable just the panel, run
+`codex mcp remove bigbrain-explorer`. [Conversation panel entrypoints](https://developers.openai.com/plugins/build/extensions)

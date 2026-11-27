@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/ewertonls/bigbrain/internal/protocol"
@@ -19,6 +20,14 @@ import (
 
 //go:embed web/*
 var viewerFiles embed.FS
+
+// These templates compose bundled HTML, CSS and JS. Runtime data arrives via the API.
+var viewerPages = template.Must(template.New("viewer").Funcs(template.FuncMap{
+	"asset": func(name string) (string, error) {
+		data, err := viewerFiles.ReadFile("web/" + name)
+		return string(data), err
+	},
+}).ParseFS(viewerFiles, "web/index.html", "web/*.tmpl"))
 
 type viewer struct {
 	binding          binding
@@ -86,6 +95,11 @@ func (v *viewer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
+		if path == "/index.html" {
+			h.Set("Content-Type", "text/html; charset=utf-8")
+			_ = viewerPages.ExecuteTemplate(w, "index.html", nil)
+			return
+		}
 		data, err := viewerFiles.ReadFile("web" + path)
 		if err != nil {
 			http.NotFound(w, r)
@@ -141,13 +155,10 @@ func (v *viewer) api(ctx context.Context, r *http.Request) (any, error) {
 	if r.Method != "POST" {
 		return nil, invalid("Unsupported viewer operation.")
 	}
-	b, err := v.workspace.bind(ctx, v.db)
-	if err != nil {
+	if err := v.checkBinding(ctx); err != nil {
 		return nil, err
 	}
-	if b != v.binding {
-		return nil, invalid("Workspace binding changed. Reopen the viewer.")
-	}
+	b := v.binding
 	switch r.URL.Path {
 	case "/api/automation", "/api/preview", "/api/policy":
 		return v.automation(ctx, b, r)
@@ -180,26 +191,45 @@ func (v *viewer) api(ctx context.Context, r *http.Request) (any, error) {
 		if err := decodeBody(r, &q); err != nil {
 			return nil, err
 		}
-		if q.Scope != b.Scope && q.Scope != "global" {
-			return nil, invalid("Scope outside this viewer.")
-		}
-		if err := q.Validate(); err != nil {
-			return nil, err
-		}
-		return callDaemon[protocol.QueryResult](ctx, b.Database, "query", q)
+		return v.query(ctx, q)
 	case "/api/history":
 		var q protocol.HistoryRequest
 		if err := decodeBody(r, &q); err != nil {
 			return nil, err
 		}
-		if q.Scope != b.Scope && q.Scope != "global" {
-			return nil, invalid("Scope outside this viewer.")
-		}
-		if err := q.Validate(); err != nil {
-			return nil, err
-		}
-		return callDaemon[protocol.HistoryResult](ctx, b.Database, "history", q)
+		return v.history(ctx, q)
 	default:
 		return nil, invalid("Unsupported viewer operation.")
 	}
+}
+
+func (v *viewer) checkBinding(ctx context.Context) error {
+	b, err := v.workspace.bind(ctx, v.db)
+	if err != nil {
+		return err
+	}
+	if b != v.binding {
+		return invalid("Workspace binding changed. Reopen the viewer.")
+	}
+	return nil
+}
+
+func (v *viewer) query(ctx context.Context, q protocol.QueryRequest) (protocol.QueryResult, error) {
+	if q.Scope != v.binding.Scope && q.Scope != "global" {
+		return protocol.QueryResult{}, invalid("Scope outside this viewer.")
+	}
+	if err := q.Validate(); err != nil {
+		return protocol.QueryResult{}, err
+	}
+	return callDaemon[protocol.QueryResult](ctx, v.binding.Database, "query", q)
+}
+
+func (v *viewer) history(ctx context.Context, q protocol.HistoryRequest) (protocol.HistoryResult, error) {
+	if q.Scope != v.binding.Scope && q.Scope != "global" {
+		return protocol.HistoryResult{}, invalid("Scope outside this viewer.")
+	}
+	if err := q.Validate(); err != nil {
+		return protocol.HistoryResult{}, err
+	}
+	return callDaemon[protocol.HistoryResult](ctx, v.binding.Database, "history", q)
 }

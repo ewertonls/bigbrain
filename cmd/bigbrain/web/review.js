@@ -1,5 +1,5 @@
 import { api } from "./client.js";
-import { action, el, element } from "./app.js";
+import { action, el, element } from "./explorer.js";
 const selected = new Set();
 let drafts = [], busy = false;
 const states = {

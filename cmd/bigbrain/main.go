@@ -186,10 +186,21 @@ func execute(args []string, options *options) (any, error) {
 	case "plugin":
 		return pluginCommand(options, args)
 	case "mcp":
+		var explorer string
+		flags.Func("explorer-workspace", "serve the read-only Conversation panel for this absolute workspace", func(path string) error {
+			if !filepath.IsAbs(path) {
+				return invalid("Use an absolute Explorer workspace.")
+			}
+			explorer = path
+			return nil
+		})
 		if err := options.parseFlags(flags, args); err != nil {
 			return parseError(flags, err)
 		}
 		return streamOutput(func(w io.Writer) error {
+			if explorer != "" {
+				return serveExplorer(options.db, explorer, os.Stdin, w)
+			}
 			return serveMCP(options.db, os.Stdin, w)
 		}), nil
 	case "project":

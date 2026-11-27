@@ -24,7 +24,8 @@ func verifyIntegration(bin, root string) []string {
 	verifyAdapterAndGraph(cli{bin: bin, db: filepath.Join(root, "adapter")})
 	verifyDirectoryProject(cli{bin: bin, db: filepath.Join(root, "directory-db"), dir: filepath.Join(root, "directory-project")})
 	verifyReviewedHandoff(cli{bin: bin, db: filepath.Join(root, "plugin-db"), dir: filepath.Join(root, "plugin-project")})
-	return []string{"reviewed_plugin_handoff", "agent_handoff", "mcp_cli_parity", "scoped_graph_view", "directory_project"}
+	verifyExplorerPanel(cli{bin: bin, db: filepath.Join(root, "panel-db"), dir: filepath.Join(root, "panel-project")})
+	return []string{"explorer_conversation_panel", "reviewed_plugin_handoff", "agent_handoff", "mcp_cli_parity", "scoped_graph_view", "directory_project"}
 }
 
 func verifyDirectoryProject(c cli) {
@@ -137,13 +138,18 @@ func verifyAdapterAndGraph(c cli) {
 	queryIDs(decode[matches](callExplicit("query", map[string]string{"scope": "project:A", "id": first.ID})), first.ID)
 }
 
-func connectMCP(ctx context.Context, c cli) (*mcp.ClientSession, func(string, any) invocation) {
-	cmd := exec.CommandContext(ctx, c.bin, "--db", c.db, "mcp")
+func startMCPClient(ctx context.Context, c cli, args ...string) *mcp.ClientSession {
+	cmd := exec.CommandContext(ctx, c.bin, append([]string{"--db", c.db, "mcp"}, args...)...)
 	cmd.Dir = c.dir
 	cmd.Stderr = os.Stderr
 	client := mcp.NewClient(&mcp.Implementation{Name: "acceptance", Version: "1"}, nil)
 	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
 	check(err)
+	return session
+}
+
+func connectMCP(ctx context.Context, c cli) (*mcp.ClientSession, func(string, any) invocation) {
+	session := startMCPClient(ctx, c)
 	return session, func(tool string, args any) invocation {
 		got, err := session.CallTool(ctx, &mcp.CallToolParams{Name: tool, Arguments: args})
 		check(err)

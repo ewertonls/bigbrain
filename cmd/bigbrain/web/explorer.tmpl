@@ -1,0 +1,37 @@
+{{define "scope"}}
+<div class="scope">
+  <label>Scope <select id="scope"><option value="project">Project</option><option value="global">Global only</option></select></label>
+  <label><input type="checkbox" id="global" checked> Include global</label>
+</div>
+{{end}}
+{{define "explorer"}}
+<section id="explorer">
+  <form id="search">
+    <label for="query">Search memories</label>
+    <div class="actions">
+      <input id="query" type="search" required placeholder="Search for a decision or evidence">
+      <button class="primary">Search</button>
+    </div>
+  </form>
+  <p role="status" id="search-status"></p>
+  <div id="results" hidden>
+    <label>Filter loaded results <input id="filter" type="search"></label>
+    <div class="choices" id="matches"></div>
+  </div>
+  <section id="selection" hidden>
+    <button id="back-results" type="button">Back to results</button>
+    <h1>Why was this memory retrieved?</h1>
+    <p id="reason"></p>
+    <div class="surface">
+      <div class="heading">
+        <h2>Retrieval path</h2>
+        <label>View <select id="mode"><option>List</option><option>Graph</option></select></label>
+      </div>
+      <div id="paths"></div>
+      <p id="counts" class="meta"></p>
+    </div>
+    <section id="inspector" aria-live="polite"></section>
+    <div id="history"></div>
+  </section>
+</section>
+{{end}}

@@ -19,7 +19,7 @@ O BigBrain recupera decisões com suas fontes ao iniciar, retomar e compactar um
 | BB-0045 | Explorer com caminho de recuperação, histórico e inspeção da fonte | `3e3d66b` |
 | BB-0046 | Revisão de conteúdo, fonte, destino e operações antes de salvar | `1e9ec65` |
 | BB-0047 | Automação com recibo, orçamento, prévia e pausa por sessão | `3246708` |
-| BB-0048 | Teste de capacidade MCP Apps e registro do resultado. Extensão opcional aberta | `8ae01b7` |
+| BB-0048 | Teste de capacidade MCP Apps e registro do resultado. Teste inicial no app-server | `8ae01b7` |
 | BB-0049 | Instalação manual, atualização e remoção | `b964bf2` |
 | BB-0050 | Aceitação de ponta a ponta e regressão de replay e continuidade | `5392dec` |
 
@@ -36,4 +36,4 @@ O BigBrain recupera decisões com suas fontes ao iniciar, retomar e compactar um
 - A identidade da base no plugin passou a resolver o prefixo físico de diretórios antes da primeira gravação. Isso mantém os rascunhos acessíveis em caminhos com symlink e preserva o contrato existente de `db-path`.
 - O salvamento só passa para concluído depois de publicar os IDs usados pela próxima sessão. Chaves e conteúdo ficam congelados durante o replay. O recall conserva toda a seleção mesmo quando só uma memória mudou e aplica o prazo de dois segundos à operação inteira.
 - O launcher passou a aceitar um ponteiro privado compartilhado para que o shell e o plugin encontrem o mesmo binário. Em um shell Codex restrito, o acesso ao socket Unix da base precisou de uma permissão específica para recuperar a evidência.
-- O cliente testado leu o recurso HTML de MCP Apps, mas o teste não demonstrou renderização nem uma chamada originada pela interface embutida. A entrega usa o navegador local. A BB-0048 depende de um host que demonstre essas capacidades. O perfil de distribuição verificado é macOS ARM64. [Teste da extensão opcional](../13-embedded-viewer.md)
+- O cliente testado leu o recurso HTML de MCP Apps, mas o teste não demonstrou renderização nem uma chamada originada pela interface embutida. A entrega usa o navegador local. Na validação posterior da BB-0048, o Codex Desktop abriu o Explorer ao lado do chat e exibiu a fonte da memória selecionada. O perfil de distribuição verificado é macOS ARM64. [Teste da extensão opcional](../13-embedded-viewer.md)

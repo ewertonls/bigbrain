@@ -1,5 +1,5 @@
 import { api } from "./client.js";
-import { el, element } from "./app.js";
+import { el, element } from "./explorer.js";
 const size = (n) =>
   n < 1024 ? n + " B" : Number((n / 1024).toFixed(2)) + " KiB";
 function draw({ last, policy, hooks }) {

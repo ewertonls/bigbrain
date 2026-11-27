@@ -11,7 +11,7 @@ Deliver a local Codex plugin that can resume work with source-linked BigBrain me
 
 - **Early CLI milestone (P2).** A developer installs the base plugin, binds a project and receives bounded evidence at startup, resume and after compaction.
 - **Local release (P6).** On a clean supported installation, a second session recovers a reviewed handoff. Explorer, Session review and Automation work offline with the embedded companion disabled. Record the tested client, platform and limitations.
-- **Optional extension (P5).** Implement the embedded viewer only on a host that demonstrates a rendered resource and a bridge round-trip. Its status is independent of the local release.
+- **Optional extension (P5).** The read-only Explorer opens beside a conversation in Codex Desktop. The panel is installed separately from the browser viewer.
 
 ## Visual references
 
@@ -36,7 +36,7 @@ Collection-wide browsing, source freshness, lesson publication UI and relationsh
 | P4 | WP-11 | [BB-0045 · Build the memory Explorer and source inspector](11-memory-explorer.md) |
 | P4 | WP-12 | [BB-0046 · Build the Session review screen for handoff drafts](12a-session-review.md) |
 | P4 | WP-12 | [BB-0047 · Build the Automation screen for recall and capture](12b-automation.md) |
-| P5 | WP-13 | [BB-0048 · Optional · Embed the shared viewer on verified MCP Apps hosts](13-embedded-viewer.md) |
+| P5 | WP-13 | [BB-0048 · Open Explorer beside a Codex Desktop conversation](13-embedded-viewer.md) |
 | P6 | WP-14 | [BB-0049 · Document manual installation, upgrade and removal](14-manual-distribution.md) |
 | P6 | WP-15 | [BB-0050 · Verify offline installation and continuity across sessions](15-release-verification.md) |
 
