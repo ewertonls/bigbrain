@@ -2,7 +2,7 @@
 kadai: task
 id: "BB-0034"
 title: "06 · Codex plugin"
-status: "todo"
+status: "in_progress"
 depends_on: [BB-0006, BB-0050]
 ---
 Deliver a local Codex plugin that can resume work with source-linked BigBrain memories, review a handoff before saving it, and inspect both workflows in a browser. The existing Go daemon owns LadybugDB and serves CLI, hooks and viewer through the Unix socket. Reuse the [completed Integration work](../05-integration/phase.md) for handoffs, MCP and graph explanations.
