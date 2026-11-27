@@ -23,7 +23,8 @@ func verifyIntegration(bin, root string) []string {
 	verifyAgentHandoff(cli{bin: bin, db: filepath.Join(root, "handoff")}, filepath.Join(filepath.Dir(bin), "..", "integrations"))
 	verifyAdapterAndGraph(cli{bin: bin, db: filepath.Join(root, "adapter")})
 	verifyDirectoryProject(cli{bin: bin, db: filepath.Join(root, "directory-db"), dir: filepath.Join(root, "directory-project")})
-	return []string{"agent_handoff", "mcp_cli_parity", "scoped_graph_view", "directory_project"}
+	verifyReviewedHandoff(cli{bin: bin, db: filepath.Join(root, "plugin-db"), dir: filepath.Join(root, "plugin-project")})
+	return []string{"reviewed_plugin_handoff", "agent_handoff", "mcp_cli_parity", "scoped_graph_view", "directory_project"}
 }
 
 func verifyDirectoryProject(c cli) {

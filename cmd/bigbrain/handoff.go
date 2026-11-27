@@ -21,6 +21,7 @@ type proposedMemory struct {
 	Text   string `json:"text"`
 	Source string `json:"source"`
 }
+
 type draftContent struct {
 	Producer      string          `json:"producer"`
 	Memory        proposedMemory  `json:"memory"`
@@ -28,6 +29,7 @@ type draftContent struct {
 	OpenQuestions []string        `json:"open_questions,omitempty"`
 	NextSteps     []string        `json:"next_steps,omitempty"`
 }
+
 type handoffDraft struct {
 	Manifest *frozenHandoff `json:"manifest,omitempty"`
 	ID       string         `json:"id"`
@@ -36,11 +38,13 @@ type handoffDraft struct {
 	Origin   binding        `json:"origin"`
 	Content  draftContent   `json:"content"`
 }
+
 type drafts []handoffDraft
 
 func (ds drafts) index(id string) int {
 	return slices.IndexFunc(ds, func(d handoffDraft) bool { return d.ID == id })
 }
+
 func validateDraft(d handoffDraft) error {
 	if !strings.HasPrefix(d.Origin.Scope, "project:") || strings.TrimSpace(d.Content.Producer) == "" {
 		return invalid("A draft requires its originating project and producer.")
@@ -63,6 +67,7 @@ func validateDraft(d handoffDraft) error {
 	}
 	return nil
 }
+
 func changeDraft(ctx context.Context, path string, b binding, action, id string, revision int, content draftContent) (handoffDraft, error) {
 	var result handoffDraft
 	err := updateState(ctx, path, func(ds *drafts) error {
@@ -108,6 +113,7 @@ func changeDraft(ctx context.Context, path string, b binding, action, id string,
 	})
 	return result, err
 }
+
 func decodeDraft(r io.Reader) (draftContent, error) {
 	var c draftContent
 	data, err := io.ReadAll(io.LimitReader(r, draftBytes+1))
@@ -127,6 +133,7 @@ func decodeDraft(r io.Reader) (draftContent, error) {
 	}
 	return c, nil
 }
+
 func handoffCommand(o *options, args []string) (any, error) {
 	if len(args) == 0 {
 		return nil, invalid("Choose handoff stage, list, edit or dismiss.")

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"io"
 	"os"
@@ -45,6 +46,7 @@ func (p *pluginOptions) register(f *flag.FlagSet) {
 	f.BoolVar(&p.global, "global", false, "read global memories only")
 	f.BoolVar(&p.include, "include-global", true, "include global memories in project reads")
 }
+
 func (p pluginOptions) bind(ctx context.Context, db string) (binding, error) {
 	cwd, err := filepath.Abs(p.cwd)
 	if err != nil {
@@ -79,13 +81,33 @@ func (p pluginOptions) bind(ctx context.Context, db string) (binding, error) {
 	if err != nil {
 		return binding{}, err
 	}
-	b := binding{Database: loc.Directory, Scope: loc.Scope, Workspace: workspace, Session: p.session, Agent: p.agent, IncludeGlobal: p.include}
+	physical, err := bindingDatabase(loc.Directory)
+	if err != nil {
+		return binding{}, err
+	}
+	b := binding{Database: physical, Scope: loc.Scope, Workspace: workspace, Session: p.session, Agent: p.agent, IncludeGlobal: p.include}
 	if p.global {
 		b.Scope = "global"
 		b.IncludeGlobal = false
 	}
 	return b, nil
 }
+
+func bindingDatabase(dir string) (string, error) {
+	prefix := dir
+	for {
+		physical, err := filepath.EvalSymlinks(prefix)
+		if err == nil {
+			suffix, _ := filepath.Rel(prefix, dir)
+			return filepath.Join(physical, suffix), nil
+		}
+		if !errors.Is(err, os.ErrNotExist) || filepath.Dir(prefix) == prefix {
+			return "", err
+		}
+		prefix = filepath.Dir(prefix)
+	}
+}
+
 func (p pluginOptions) stateDir() (string, error) {
 	dir := p.state
 	if dir == "" {
@@ -114,6 +136,7 @@ func (p pluginOptions) stateDir() (string, error) {
 	}
 	return dir, nil
 }
+
 func pluginCommand(o *options, args []string) (any, error) {
 	if len(args) == 1 && args[0] == "hook" {
 		return streamOutput(func(w io.Writer) error { return runPluginHook(o.db, os.Stdin, w) }), nil

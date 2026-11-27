@@ -8,12 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ewertonls/bigbrain/internal/protocol"
 	"io"
 	"net"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/ewertonls/bigbrain/internal/protocol"
 )
 
 //go:embed web/*
@@ -61,6 +62,7 @@ func uiCommand(o *options, args []string) (any, error) {
 		return srv.Serve(listener)
 	}), nil
 }
+
 func (v *viewer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	h.Set("Cache-Control", "no-store")
@@ -115,6 +117,7 @@ func (v *viewer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = protocol.Encode(w, result, err)
 }
+
 func decodeBody(r *http.Request, dst any) error {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
@@ -126,6 +129,7 @@ func decodeBody(r *http.Request, dst any) error {
 	}
 	return nil
 }
+
 func (v *viewer) api(ctx context.Context, r *http.Request) (any, error) {
 	if r.Method == "GET" && r.URL.Path == "/api/status" {
 		state, err := lifecycle("status", v.binding.Database)

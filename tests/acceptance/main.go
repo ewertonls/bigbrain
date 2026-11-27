@@ -83,14 +83,16 @@ func (c cli) run(args ...string) invocation {
 	return c.invoke(append([]string{"--json"}, args...)...)
 }
 
-func (c cli) invoke(args ...string) invocation {
+func (c cli) invoke(args ...string) invocation { return c.invokeInput(nil, args...) }
+
+func (c cli) invokeInput(input io.Reader, args ...string) invocation {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, c.bin, append([]string{"--db", c.db}, args...)...)
 	cmd.Dir = c.dir
 	cmd.Env = append(os.Environ(), c.env...)
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = input, &stdout, &stderr
 	runErr := cmd.Run()
 	var reply response
 	if err := json.Unmarshal(stdout.Bytes(), &reply); err != nil {

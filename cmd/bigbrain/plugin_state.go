@@ -4,15 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 func (b binding) sessionFile(dir, kind string) string {
 	return filepath.Join(dir, kind+"-"+stateKey(b.Database, b.Scope, b.Workspace, b.Session, b.Agent)+".json")
 }
+
 func (b binding) handoffPointer(dir string) string {
 	return filepath.Join(dir, "latest-"+stateKey(b.Database, b.Scope)+".json")
 }
@@ -77,5 +79,13 @@ func updateState[T any](ctx context.Context, path string, change func(*T) error)
 	if cerr != nil {
 		return cerr
 	}
-	return os.Rename(f.Name(), path)
+	if err = os.Rename(f.Name(), path); err != nil {
+		return err
+	}
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }

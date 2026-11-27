@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/ewertonls/bigbrain/internal/daemon"
-	"github.com/ewertonls/bigbrain/internal/protocol"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/ewertonls/bigbrain/internal/daemon"
+	"github.com/ewertonls/bigbrain/internal/protocol"
 )
 
 const contextLimit = 8192
@@ -17,6 +18,7 @@ type emittedMemory struct {
 	ID   string `json:"id"`
 	Hash string `json:"hash"`
 }
+
 type recallReceipt struct {
 	At            time.Time       `json:"at"`
 	Memories      []emittedMemory `json:"memories"`
@@ -27,21 +29,38 @@ type recallReceipt struct {
 	Hash          string          `json:"hash"`
 	Fallback      string          `json:"fallback,omitempty"`
 }
+
 type contextPacket struct {
 	Text    string        `json:"text"`
 	Receipt recallReceipt `json:"receipt"`
 }
+
 type recallInput struct {
 	Text      string
 	IDs       []string
 	Bootstrap bool
 }
+
 type recallState struct {
-	Source        string         `json:"source,omitempty"`
-	EpochStart    time.Time      `json:"epoch_start,omitempty"`
-	IncludeGlobal bool           `json:"include_global"`
-	Last          *recallReceipt `json:"last,omitempty"`
+	Selection     []emittedMemory `json:"selection,omitempty"`
+	Source        string          `json:"source,omitempty"`
+	EpochStart    time.Time       `json:"epoch_start,omitempty"`
+	IncludeGlobal bool            `json:"include_global"`
+	Last          *recallReceipt  `json:"last,omitempty"`
 }
+
+func (s recallState) seeds() []string {
+	selected := s.Selection
+	if selected == nil && s.Last != nil {
+		selected = s.Last.Memories
+	}
+	var ids []string
+	for _, m := range selected {
+		ids = append(ids, m.ID)
+	}
+	return ids
+}
+
 type latestHandoff struct {
 	IDs       []string  `json:"ids"`
 	Workspace string    `json:"workspace"`
@@ -58,6 +77,7 @@ func excerpt(s string, n int) string {
 	}
 	return s[:n] + "…"
 }
+
 func projectContext(matches []protocol.Match, fallback string, seen map[string]bool) contextPacket {
 	r := recallReceipt{At: time.Now().UTC(), Limit: contextLimit, Memories: []emittedMemory{}, Fallback: fallback}
 	var out strings.Builder
@@ -91,6 +111,7 @@ func projectContext(matches []protocol.Match, fallback string, seen map[string]b
 	r.Hash = stateKey(text)
 	return contextPacket{text, r}
 }
+
 func recallMatches(ctx context.Context, b binding, dir string, input recallInput, autoStart bool) ([]protocol.Match, string, error) {
 	if input.Text != "" && len(input.IDs) > 0 {
 		return nil, "", invalid("Choose search text or memory IDs.")
@@ -123,6 +144,9 @@ func recallMatches(ctx context.Context, b binding, dir string, input recallInput
 	var fallback string
 	for _, id := range ids {
 		q := protocol.QueryRequest{Scope: b.Scope, IncludeGlobal: b.IncludeGlobal, Text: input.Text, ID: id, Limit: 10}
+		if input.Text != "" {
+			q.Mode = "hybrid"
+		}
 		if err := q.Validate(); err != nil {
 			return nil, "", err
 		}
@@ -135,6 +159,7 @@ func recallMatches(ctx context.Context, b binding, dir string, input recallInput
 	}
 	return matches, fallback, nil
 }
+
 func contextCommand(o *options, args []string) (any, error) {
 	f := newFlags("context")
 	o.register(f)
@@ -164,7 +189,13 @@ func contextCommand(o *options, args []string) (any, error) {
 	}
 	packet := projectContext(matches, fallback, nil)
 	if !*preview {
-		err = updateState(ctx, b.sessionFile(dir, "recall"), func(s *recallState) error { s.Last = &packet.Receipt; return nil })
+		err = updateState(ctx, b.sessionFile(dir, "recall"), func(s *recallState) error {
+			s.Last = &packet.Receipt
+			s.Selection = packet.Receipt.Memories
+			s.Source = ""
+			s.EpochStart = packet.Receipt.At
+			return nil
+		})
 	}
 	return packet, err
 }

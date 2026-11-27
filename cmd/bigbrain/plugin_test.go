@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/ewertonls/bigbrain/internal/protocol"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/ewertonls/bigbrain/internal/protocol"
 )
 
 func TestPluginBindingWorktrees(t *testing.T) {

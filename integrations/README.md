@@ -47,6 +47,13 @@ are independent. An explicit query can start the daemon. Automatic recall skips
 a stopped daemon. The desktop hook review is described in the
 [Codex hooks guide](https://learn.chatgpt.com/docs/hooks).
 
+In a sandboxed Codex shell, a preview can return `DAEMON_UNAVAILABLE` with
+`connect: operation not permitted`. The error identifies the database's Unix
+socket. A shell needs permission to connect to that socket even for a read-only
+query. On the verified macOS client, a read-only permission profile using the
+network proxy and an exact socket allowlist entry recovered the handoff. Use
+the socket path reported for your database. [Codex permission profile settings](https://learn.chatgpt.com/docs/config-file/config-reference)
+
 Open `"$executable" ui --session SESSION_ID` using the printed URL in a local
 browser. Within Codex the CLI defaults to `CODEX_THREAD_ID` when set. The URL
 contains a per-launch secret. Search, review and automation run entirely on

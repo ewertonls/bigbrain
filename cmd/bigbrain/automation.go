@@ -52,12 +52,7 @@ func (v *viewer) automation(ctx context.Context, b binding, r *http.Request) (an
 	}
 	if r.URL.Path == "/api/preview" {
 		b.IncludeGlobal = !policy.ProjectOnly
-		in := recallInput{Bootstrap: !policy.DisableBootstrap}
-		if s.Last != nil {
-			for _, m := range s.Last.Memories {
-				in.IDs = append(in.IDs, m.ID)
-			}
-		}
+		in := recallInput{Bootstrap: !policy.DisableBootstrap, IDs: s.seeds()}
 		matches, fallback, err := recallMatches(ctx, b, v.dir, in, true)
 		if err != nil {
 			return nil, err

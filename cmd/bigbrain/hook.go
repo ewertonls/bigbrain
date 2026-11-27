@@ -17,6 +17,7 @@ type sessionPolicy struct {
 	ProjectOnly      bool `json:"project_only"`
 	DisableBootstrap bool `json:"disable_bootstrap"`
 }
+
 type hookEvent struct {
 	Session string `json:"session_id"`
 	Agent   string `json:"agent_id"`
@@ -34,20 +35,18 @@ func runPluginHook(db string, in io.Reader, out io.Writer) error {
 	response := map[string]any{}
 	// A slow or malformed host input must not hold up the session. This command
 	// handles one event and exits, releasing a blocked stdin reader.
-	eventReady := make(chan hookEvent, 1)
+	result := make(chan string, 1)
 	go func() {
 		var e hookEvent
 		data, err := io.ReadAll(io.LimitReader(in, 65537))
-		if err == nil && len(data) <= 65536 {
-			if json.Unmarshal(data, &e) != nil {
-				e = hookEvent{}
-			}
+		if err != nil || len(data) > 65536 || json.Unmarshal(data, &e) != nil {
+			result <- ""
+			return
 		}
-		eventReady <- e
+		result <- hookRecall(ctx, start, db, e)
 	}()
 	select {
-	case e := <-eventReady:
-		text := hookRecall(ctx, start, db, e)
+	case text := <-result:
 		if text != "" && ctx.Err() == nil {
 			response["hookSpecificOutput"] = map[string]string{"hookEventName": "SessionStart", "additionalContext": text}
 		}
@@ -55,6 +54,7 @@ func runPluginHook(db string, in io.Reader, out io.Writer) error {
 	}
 	return json.NewEncoder(out).Encode(response)
 }
+
 func hookRecall(ctx context.Context, start time.Time, db string, e hookEvent) string {
 	flush := e.Event == "Stop" || e.Event == "PreCompact"
 	if (!flush && (e.Event != "SessionStart" || (e.Source != "startup" && e.Source != "resume" && e.Source != "compact"))) || e.Session == "" || !filepath.IsAbs(e.Cwd) {
@@ -107,12 +107,7 @@ func hookRecall(ctx context.Context, start time.Time, db string, e hookEvent) st
 	if err != nil {
 		return ""
 	}
-	input := recallInput{Bootstrap: !policy.DisableBootstrap}
-	if old.Last != nil {
-		for _, m := range old.Last.Memories {
-			input.IDs = append(input.IDs, m.ID)
-		}
-	}
+	input := recallInput{Bootstrap: !policy.DisableBootstrap, IDs: old.seeds()}
 	matches, fallback, err := recallMatches(ctx, b, dir, input, false)
 	if err != nil {
 		return ""
@@ -120,20 +115,22 @@ func hookRecall(ctx context.Context, start time.Time, db string, e hookEvent) st
 	var packet contextPacket
 	err = updateState(ctx, path, func(s *recallState) error {
 		// Coalesce concurrent deliveries; the host does not supply an event ID.
+		if s.EpochStart.After(start) {
+			return errSkip
+		}
+		selection := projectContext(matches, fallback, nil)
+		packet = selection
 		if s.Source == e.Source && (e.Source == "startup" || start.Sub(s.EpochStart) < 250*time.Millisecond) && s.IncludeGlobal == b.IncludeGlobal {
 			seen := map[string]bool{}
-			if s.Last != nil {
-				for _, m := range s.Last.Memories {
-					seen[m.Hash] = true
-				}
+			for _, m := range s.Selection {
+				seen[m.Hash] = true
 			}
 			packet = projectContext(matches, fallback, seen)
 			if packet.Text == "" {
 				return errSkip
 			}
-		} else {
-			packet = projectContext(matches, fallback, nil)
 		}
+		s.Selection = selection.Receipt.Memories
 		s.Source = e.Source
 		s.EpochStart = start
 		s.IncludeGlobal = b.IncludeGlobal

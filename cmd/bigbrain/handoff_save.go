@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"slices"
+	"time"
+
 	"github.com/ewertonls/bigbrain/internal/daemon"
 	"github.com/ewertonls/bigbrain/internal/protocol"
-	"time"
 )
 
 type frozenHandoff struct {
@@ -29,6 +31,7 @@ func freeze(d handoffDraft) *frozenHandoff {
 	}
 	return m
 }
+
 func saveHandoff(ctx context.Context, b binding, dir, id string, revision int, autoStart bool) (handoffDraft, error) {
 	path := b.sessionFile(dir, "drafts")
 	// Serialize changes to the manifest, releasing the lock before each RPC.
@@ -67,29 +70,15 @@ func saveHandoff(ctx context.Context, b binding, dir, id string, revision int, a
 	if err != nil {
 		return d, err
 	}
-	connect := func() (*daemon.Client, error) {
-		c, err := daemon.Connect(ctx, d.Origin.Database, autoStart)
-		if err == nil && c == nil {
-			err = invalid("Daemon unavailable for retry.")
-		}
-		return c, err
-	}
 	var client *daemon.Client
 	for d.Status != "saved" {
 		m := d.Manifest
-		idx := -1
-		for i, v := range m.IDs {
-			if v == "" {
-				idx = i
-				break
-			}
-		}
+		idx := slices.Index(m.IDs, "")
 		if idx < 0 && (len(m.IDs) == 1 || m.LinkID != "") {
 			d, err = change(func(d *handoffDraft) error {
 				if d.Manifest.Confirmed.IsZero() {
 					d.Manifest.Confirmed = time.Now().UTC()
 				}
-				d.Status = "saved"
 				return nil
 			})
 			if err != nil {
@@ -111,7 +100,10 @@ func saveHandoff(ctx context.Context, b binding, dir, id string, revision int, a
 			continue
 		}
 		if client == nil {
-			client, err = connect()
+			client, err = daemon.Connect(ctx, d.Origin.Database, autoStart)
+			if err == nil && client == nil {
+				err = invalid("Daemon unavailable for retry.")
+			}
 		}
 		var res protocol.WriteResult
 		if err == nil {
@@ -153,5 +145,8 @@ func saveHandoff(ctx context.Context, b binding, dir, id string, revision int, a
 		}
 		return nil
 	})
-	return d, err
+	if err != nil || d.Status == "saved" {
+		return d, err
+	}
+	return change(func(d *handoffDraft) error { d.Status = "saved"; return nil })
 }
