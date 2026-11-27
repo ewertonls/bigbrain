@@ -2,8 +2,8 @@
 // twice (or several edges may join the same pair), so use relationship IDs.
 export function neighborhood(histories) {
   const nodes = new Map(), edges = new Map()
-  for (const { memory, related } of histories) {
-    nodes.set(memory.id, memory)
+  for (const { memory, status, invalidation, related } of histories) {
+    nodes.set(memory.id, { ...memory, status, invalidation })
     for (const item of related) {
       if (!nodes.has(item.id)) nodes.set(item.id, item)
       edges.set(item.path.relationship_id, item.path)

@@ -137,6 +137,7 @@ export function draw($, event, p, run, reopen) {
       body.push(
         button('drafts', 'Handoff review' + (p.pending ? ' · ' + p.pending + ' pending' : ''), a.drafts),
       )
+      if (p.pending == null) body.push(muted('Pending handoff count unavailable.'))
     }
   } else if (p.page === 'memories') {
     body.push(
@@ -330,10 +331,18 @@ export function draw($, event, p, run, reopen) {
           divider(),
           muted(titleCase(node.type)),
           heading(caption(node)),
+          ...(node.status ? [fact('Status', titleCase(node.status))] : []),
           fact('Source', node.source),
           fact('Scope', node.scope),
           fact('Memory ID', node.id),
         )
+        if (node.invalidation) {
+          body.push(
+            fact('Invalidation reason', node.invalidation.reason),
+            fact('Invalidation source', node.invalidation.source),
+            fact('Invalidated at', time(node.invalidation.at)),
+          )
+        }
         if (node.id !== p.seed) body.push(button('follow', 'Explore neighbors', () => a.follow(node.id)))
       }
     }

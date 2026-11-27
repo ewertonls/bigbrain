@@ -15,7 +15,10 @@ export function workspace($, p) {
   const history = (id, limit, after = '') => read('history', { id, limit, after })
 
   async function overview() {
-    const [batch, drafts] = await Promise.all([recent(6), p.scope === 'global' ? [] : api('drafts', {})])
+    const [batch, drafts] = await Promise.all([
+      recent(6),
+      p.scope === 'global' ? [] : api('drafts', {}).catch(() => null),
+    ])
     const histories = await Promise.all(batch.memories.slice(0, 3).map((m) => history(m.id, 5)))
     p.recent = batch.memories
     p.hasMore = !!batch.next_cursor
@@ -24,7 +27,7 @@ export function workspace($, p) {
       histories.flatMap((h) => h.related.map((item) => [item.path.relationship_id, h.memory.id])),
     )
     p.seed = (histories.find((h) => h.related.length) || histories[0])?.memory.id
-    p.pending = drafts.filter((d) => !['saved', 'dismissed'].includes(d.status)).length
+    p.pending = drafts?.filter((d) => !['saved', 'dismissed'].includes(d.status)).length
     p.page = 'overview'
   }
   async function memories(term = '', after = '') {
@@ -123,10 +126,17 @@ export function workspace($, p) {
       await graph(id)
       p.trail.pop()
     },
-    selectNode(id) {
+    async selectNode(id) {
       p.selected = id
       p.edge = null
       p.feedback = null
+      const node = p.network.nodes.get(id)
+      if (id !== p.seed && node.status === 'invalidated' && !node.invalidation) {
+        // Related memories carry their status. The reason belongs to their own history.
+        const detail = await history(id, 1)
+        node.status = detail.status
+        node.invalidation = detail.invalidation
+      }
     },
     selectEdge(edge) {
       p.edge = edge

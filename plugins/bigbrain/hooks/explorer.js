@@ -113,7 +113,7 @@ export function register(on) {
         if (p.page === 'overview') {
           p.trail = []
           await p.actions.graph(pick.node)
-        } else p.actions.selectNode(pick.node)
+        } else await p.actions.selectNode(pick.node)
       } else if (p.network.edges.has(pick.edge)) {
         const edge = p.network.edges.get(pick.edge)
         if (p.page === 'overview') {
