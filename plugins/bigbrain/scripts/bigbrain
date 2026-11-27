@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+data=${PLUGIN_DATA:-${CLAUDE_PLUGIN_DATA:-}}
+if [ -z "$data" ] || ! IFS= read -r executable < "$data/executable.path"; then
+    echo "Configure the native BigBrain path using the setup skill." >&2
+    exit 1
+fi
+case "$executable" in
+    /*) ;;
+    *) echo "BigBrain requires an absolute executable path." >&2; exit 1 ;;
+esac
+if [ ! -f "$executable" ] || [ ! -x "$executable" ]; then
+    echo "Configured BigBrain executable is unavailable." >&2
+    exit 1
+fi
+exec "$executable" "$@"

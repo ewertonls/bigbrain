@@ -1,0 +1,6 @@
+{
+  "name": "bigbrain",
+  "version": "0.1.0",
+  "description": "Recall local project memory and review evidence with BigBrain.",
+  "skills": "./skills/"
+}
