@@ -2,7 +2,7 @@
 kadai: task
 id: "BB-0045"
 title: "Build the memory Explorer and source inspector"
-status: "todo"
+status: "done"
 parent: BB-0034
 depends_on: [BB-0044]
 ---
@@ -19,3 +19,13 @@ Let a reader follow a result back to the evidence that surfaced it. Keep search 
 - Deduplicate edges from `reason.steps` and `reason.path` by relationship ID. Show stored direction and annotate reverse traversal separately. Hydrate missing text through bounded scoped queries or label it unavailable. Cap expansion at 50 nodes/100 edges and label the displayed subset. Browsing leaves activation counts unchanged.
 - Search, inspect and copy using only the keyboard; expose relationships in a table. On narrow screens keep search/scope available and open the inspector separately. Support visible focus, text labels and reduced motion.
 - In a one-hop fixture, identify the text match, follow the labeled relationship and select either node to inspect its own source. The reason and diagram reflect the returned path. For a direct match, show the matched terms and source without adding an edge.
+
+<!-- kadai:log:start -->
+
+## Log
+
+### 2026-11-27T02:13:01-03:00
+
+Tested a live Chromium query across project/global data, inspected the selected memory and history relationship, switched to graph/global-only, checked isolation and 320px layout. Simple-code review corrected the global-only toggle display and added narrow-screen result/detail navigation. The frontend uses built-in browser modules and the existing query/history contracts.
+
+<!-- kadai:log:end -->
