@@ -31,6 +31,7 @@ Commands:
   feedback-history Inspect recorded uses and priority changes for a relationship.
   reconcile        Review two claims and record a project conclusion.
   query            Search memories or look up an ID.
+  ui               Open a local memory viewer by URL.
   graph            Show a query's memories and paths as standalone HTML.
   mcp              Serve memory tools to an MCP client over standard I/O.
   invalidate       Hide a memory and preserve its history.
@@ -176,6 +177,8 @@ func execute(args []string, options *options) (any, error) {
 	switch command {
 	case "help":
 		return helpText(flags), nil
+	case "ui":
+		return uiCommand(options, args)
 	case "handoff":
 		return handoffCommand(options, args)
 	case "context":
