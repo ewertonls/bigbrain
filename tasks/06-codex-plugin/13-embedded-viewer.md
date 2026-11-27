@@ -15,3 +15,13 @@ Proceed only for a client that passed the rendered-resource and bridge round-tri
 - Disable the companion and demonstrate the base CLI, hooks and all browser screens still work. Where rendering is unsupported, record the browser fallback and leave this extension outside the release criteria.
 
 Reuse the [same screens and interaction contract](references/ui-specification.md).
+
+<!-- kadai:log:start -->
+
+## Log
+
+### 2026-11-27T02:16:13-03:00
+
+FALLBACK on the tested local Codex 0.172.0 app-server. A disposable stdio MCP server registered a viewer tool, an app-only acknowledgement tool and ui://probe/view.html (text/html;profile=mcp-app). The real client called the tool and read its HTML resource, but did not advertise the MCP Apps UI extension at initialize. A rendered view, app-only visibility enforcement and a UI-originated acknowledgement were not demonstrated. Simple-code review retained the existing browser frontend and deferred the optional adapter until a rendering host qualifies. This task stays open.
+
+<!-- kadai:log:end -->
