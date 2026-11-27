@@ -15,8 +15,22 @@ import (
 func verifyExplorerPanel(c cli) {
 	defer shutdown(c)
 	check(os.Mkdir(c.dir, 0700))
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	auto := startMCPClient(ctx, c, "--explorer-workspace", ".")
+	defer auto.Close()
+	browse := func(scope string) *mcp.CallToolResult {
+		r, err := auto.CallTool(ctx, &mcp.CallToolParams{Name: "explorer_browse", Arguments: map[string]any{"scope": scope}})
+		check(err)
+		return r
+	}
+	require(browse("global").IsError, "unconfigured workspace exposed global memories")
 	decode[json.RawMessage](c.run("project", "init", "A"))
 	id := write(c, recordArgs("transport", "Use a local socket.", "docs/transport.md")...).ID
+	result := browse("project:A")
+	page, err := json.Marshal(result.Meta["bigbrain"])
+	check(err)
+	require(!result.IsError && strings.Contains(string(page), id), "automatic Explorer missed its newly configured project")
 	c.env = []string{"BIGBRAIN_CODEX_STATE=" + c.db + "-state", "CODEX_THREAD_ID=panel-session"}
 	decode[json.RawMessage](c.run("context", "--id", id))
 	draft := decode[struct {
@@ -25,8 +39,6 @@ func verifyExplorerPanel(c cli) {
 	}](c.invokeInput(strings.NewReader(`{"producer":"panel fixture","memory":{"type":"decision","text":"Approve this version.","source":"fixture/review"}}`), "--json", "handoff", "stage"))
 	workspace := c.dir
 	c.dir = filepath.Dir(workspace) // MCP can start in a plugin cache outside the project.
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
 	session := startMCPClient(ctx, c, "--explorer-workspace", workspace)
 	defer session.Close()
 	list, err := session.ListTools(ctx, nil)
@@ -122,4 +134,5 @@ func verifyExplorerPanel(c cli) {
 	require(call("explorer_query", q).IsError, "panel accepted another project")
 	check(os.WriteFile(filepath.Join(workspace, ".bigbrain-project"), []byte("B\n"), 0600))
 	require(call("explorer_query", q).IsError, "panel followed a changed project binding")
+	require(browse("project:B").IsError, "automatic Explorer followed a changed project binding")
 }

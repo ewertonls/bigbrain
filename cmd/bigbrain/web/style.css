@@ -226,6 +226,7 @@ nav button,
   padding: 8px 0;
 }
 nav button {
+  padding-inline: min(2vw,12px);
   font-size: 14px;
 }
 nav [aria-pressed=true] {

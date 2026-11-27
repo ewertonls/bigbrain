@@ -76,16 +76,18 @@ binary, canonical database, pending drafts and frozen retry manifests.
 ### Open Explorer beside a desktop conversation
 
 The optional MCP server serves the project workspace beside a conversation and compact cards inside the chat. It starts read-only.
-Build the native package with `make package-macos-arm64`. From the initialized
-BigBrain project, register an absolute executable and workspace:
+Build the native package with `make package-macos-arm64`. Register the absolute
+executable once to follow the working directory of each local Codex chat:
 
 ```sh
-codex mcp add bigbrain-explorer -- "$executable" mcp --explorer-workspace "$PWD"
+codex mcp add bigbrain-explorer -- "$executable" mcp --explorer-workspace .
 ```
 
 For a separate database, insert `--db /absolute/path/to/db` before `mcp`.
-The registration pins the workspace even when the desktop client launches MCP
-from a cache directory. The project name is visible in the scope selector.
+Each chat resolves its own project. In a new repository, run
+`bigbrain project init PROJECT_ID` and select **Try again** in the panel. To pin one workspace across
+all chats, replace the dot with its absolute path. The scope selector displays
+the resolved project name.
 
 In Codex Desktop, open the side panel for the conversation, open its tab menu
 and select **BigBrain Explorer**. The **Overview** opens on recent memories.

@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -31,6 +32,7 @@ var viewerPages = template.Must(template.New("viewer").Funcs(template.FuncMap{
 
 type viewer struct {
 	binding          binding
+	pinBinding       sync.Once
 	dir, host, token string
 	workspace        pluginOptions
 	db               string
@@ -213,6 +215,11 @@ func (v *viewer) checkBinding(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	v.pinBinding.Do(func() {
+		if v.binding.Scope == "" {
+			v.binding = b
+		}
+	})
 	if b != v.binding {
 		return invalid("Workspace binding changed. Reopen the viewer.")
 	}

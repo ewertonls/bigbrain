@@ -189,9 +189,9 @@ func execute(args []string, options *options) (any, error) {
 		var explorer string
 		session := flags.String("explorer-session", "", "pin cards to this BigBrain session")
 		review := flags.Bool("explorer-review", false, "enable reviewed draft actions for the pinned session")
-		flags.Func("explorer-workspace", "serve the Conversation panel for this absolute workspace", func(path string) error {
-			if !filepath.IsAbs(path) {
-				return invalid("Use an absolute Explorer workspace.")
+		flags.Func("explorer-workspace", "serve the Conversation panel for the chat's working directory (.) or a fixed absolute path", func(path string) error {
+			if path != "." && !filepath.IsAbs(path) {
+				return invalid("Use . or an absolute Explorer workspace.")
 			}
 			explorer = path
 			return nil

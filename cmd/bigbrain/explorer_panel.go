@@ -21,7 +21,9 @@ func serveExplorer(db, workspace, session string, review bool, in io.ReadCloser,
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	b, err := p.bind(ctx, db)
 	cancel()
-	if err != nil {
+	// Codex also discovers tools outside a project. Let that discovery succeed
+	// and bind on first use if the chat's workspace is initialized later.
+	if err != nil && !(workspace == "." && (errors.Is(err, errProjectUnavailable) || errors.Is(err, errProjectNotConfigured))) {
 		return err
 	}
 	v := viewer{binding: b, workspace: p, db: db}
@@ -51,6 +53,7 @@ func serveExplorer(db, workspace, session string, review bool, in io.ReadCloser,
 		},
 	}
 	addExplorerTool(server, &v, open, func(ctx context.Context, _ struct{}) (any, error) {
+		b := v.binding
 		state, err := lifecycle("status", b.Database)
 		if err != nil {
 			return nil, err
@@ -68,7 +71,7 @@ func serveExplorer(db, workspace, session string, review bool, in io.ReadCloser,
 		readDrafts := func(ctx context.Context, _ struct{}) (any, error) { return v.reviewCard(review) }
 		addExplorerTool(server, &v, &mcp.Tool{Name: "review_card", Title: "BigBrain handoff review", Description: "Inspect pending handoff drafts in the pinned project and session.", Meta: card}, readDrafts)
 		addExplorerTool(server, &v, &mcp.Tool{Name: "explorer_drafts", Meta: appOnly}, readDrafts)
-		addExplorerTool(server, &v, &mcp.Tool{Name: "explorer_automation", Meta: appOnly}, func(context.Context, struct{}) (any, error) { return v.sessionAutomation(b) })
+		addExplorerTool(server, &v, &mcp.Tool{Name: "explorer_automation", Meta: appOnly}, func(context.Context, struct{}) (any, error) { return v.sessionAutomation(v.binding) })
 		if review {
 			for _, op := range []string{"edit", "save", "dismiss"} {
 				tool := &mcp.Tool{Name: "explorer_" + op, Meta: appOnly, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false}}
