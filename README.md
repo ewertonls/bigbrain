@@ -487,3 +487,6 @@ flags map to JSON fields with underscores in place of hyphens.
 
 The retrieval evaluations report source hits, irrelevant results and measured
 costs. [Memory evaluation](docs/MEMORY-EVALUATION.md) · [Foundation evaluation](docs/FOUNDATION-EVALUATION.md) · [Foundation specification](docs/SPEC.md)
+
+For the local Codex marketplace package, session hooks, reviewed handoffs and
+browser viewer, follow the [Codex installation guide](integrations/README.md#install-the-local-codex-plugin).

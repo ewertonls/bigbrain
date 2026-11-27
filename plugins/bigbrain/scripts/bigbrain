@@ -1,8 +1,17 @@
 #!/bin/sh
 set -eu
 data=${PLUGIN_DATA:-${CLAUDE_PLUGIN_DATA:-}}
-if [ -z "$data" ] || ! IFS= read -r executable < "$data/executable.path"; then
-    echo "Configure the native BigBrain path using the setup skill." >&2
+if [ -n "$data" ] && [ -f "$data/state.path" ]; then
+    IFS= read -r BIGBRAIN_CODEX_STATE < "$data/state.path" || exit 1
+    export BIGBRAIN_CODEX_STATE
+fi
+state=${BIGBRAIN_CODEX_STATE:-${XDG_STATE_HOME:-"$HOME/.local/state"}/bigbrain/codex}
+pointer="$state/executable.path"
+if [ -n "$data" ] && [ -f "$data/executable.path" ]; then
+    pointer="$data/executable.path"
+fi
+if [ ! -f "$pointer" ] || ! IFS= read -r executable < "$pointer"; then
+    echo "Configure the absolute BigBrain executable in $pointer." >&2
     exit 1
 fi
 case "$executable" in
@@ -10,11 +19,7 @@ case "$executable" in
     *) echo "BigBrain requires an absolute executable path." >&2; exit 1 ;;
 esac
 if [ ! -f "$executable" ] || [ ! -x "$executable" ]; then
-    echo "Configured BigBrain executable is unavailable." >&2
+    echo "Configured BigBrain executable is unavailable. Update $pointer." >&2
     exit 1
-fi
-if [ -f "$data/state.path" ]; then
-    IFS= read -r BIGBRAIN_CODEX_STATE < "$data/state.path" || exit 1
-    export BIGBRAIN_CODEX_STATE
 fi
 exec "$executable" "$@"

@@ -15,3 +15,54 @@ cp -R "$integration_dir/claude-code/bigbrain-resume" .claude/skills/
 2. In a new Claude Code session, invoke `/bigbrain-resume` with the same database directory, project ID and the three IDs from the writer. The reader verifies the recorded relationship and retrieves both sources. It also accepts a search phrase when the IDs are unavailable. [Reader](claude-code/bigbrain-resume/SKILL.md)
 
 Both clients also run directly through the commands in their skill files for offline acceptance testing. Project skill installation follows the [Codex skill conventions](https://learn.chatgpt.com/docs/build-skills) and [Claude Code skill conventions](https://code.claude.com/docs/en/skills).
+
+## Install the local Codex plugin
+
+Verified profile: Codex CLI 0.172.0, macOS ARM64 27.2.1 and LadybugDB 0.17.0.
+Build with `make package-macos-arm64`. Copy the complete `dist/macos-arm64`
+directory to the desired location, keeping bin, lib and licenses together.
+
+In a shell, replace the example path with the absolute installed executable:
+
+```sh
+executable="/absolute/path/to/BigBrain/bin/bigbrain"
+"$executable" --help
+state="${XDG_STATE_HOME:-$HOME/.local/state}/bigbrain/codex"
+(umask 077 && mkdir -p "$state" && printf '%s\n' "$executable" > "$state/executable.path")
+codex plugin marketplace add /absolute/path/to/bigbrain-checkout
+codex plugin add bigbrain@bigbrain-local
+```
+
+For a Git installation, use `codex plugin marketplace add OWNER/REPO --ref REF`
+with a revision containing the plugin catalog, then the same plugin-add command.
+The checkout and native runtime can be installed in separate locations. If the
+binary moves, update the pointer. A plugin-specific pointer takes precedence
+when present. The launcher identifies the selected pointer in its error output.
+
+From the target workspace, initialize an unbound project once with
+`"$executable" project init PROJECT_ID`. Run `"$executable" --json plugin doctor`.
+Start a local Codex session and review the plugin's SessionStart, PreCompact and
+Stop commands through `/hooks`. Configuration, host trust and a running daemon
+are independent. An explicit query can start the daemon. Automatic recall skips
+a stopped daemon. The desktop hook review is described in the
+[Codex hooks guide](https://learn.chatgpt.com/docs/hooks).
+
+Open `"$executable" ui --session SESSION_ID` using the printed URL in a local
+browser. Within Codex the CLI defaults to `CODEX_THREAD_ID` when set. The URL
+contains a per-launch secret. Search, review and automation run entirely on
+loopback; no Node runtime or MCP companion is required. End the foreground
+viewer with Ctrl-C. An optional embedded surface requires a separate host
+capability check.
+
+To update, finish outstanding work, shut down the old daemon with the old
+binary and its original DB selection, then replace the entire native package.
+Refresh Git sources with `codex plugin marketplace upgrade bigbrain-local` (or
+update a local checkout) and reinstall with `codex plugin add bigbrain@bigbrain-local`.
+Check doctor, start a new session, and review changed hooks in the host.
+Keep the database directory and helper state across upgrades. Restart any
+separately configured MCP process after changing its workspace binding.
+
+Use the client's plugin controls to disable BigBrain, or remove the package
+with `codex plugin remove bigbrain@bigbrain-local`. Verify in a new session
+that its hooks are absent. Removal preserves the separately installed native
+binary, canonical database, pending drafts and frozen retry manifests.
