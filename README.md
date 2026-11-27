@@ -36,6 +36,13 @@ library path in the executable and test binaries. You can run
 
 ## Build and install
 
+On an Apple Silicon Mac, run `make package-macos-arm64` and copy the entire
+`dist/macos-arm64` directory to the installation location. Launch its
+`bin/bigbrain` by absolute path. Preserve its executable bit and keep
+`lib/liblbug.0.dylib` and the bundled licenses alongside the `bin` directory.
+The loader resolves the library relative to the executable, so the installation
+can move independently of the source checkout. Verified on macOS 27.2.1 ARM64.
+
 From the source checkout on a machine with Docker:
 
 ```sh

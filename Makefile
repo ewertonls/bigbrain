@@ -12,6 +12,14 @@ export CGO_LDFLAGS := "-L$(ladybug_dir)"
 build: setup
 	go build $(go_flags) -o build/bigbrain ./cmd/bigbrain
 
+.PHONY: package-macos-arm64
+package-macos-arm64: setup
+	@test "$$(uname -sm)" = "Darwin arm64"
+	mkdir -p dist/macos-arm64/bin dist/macos-arm64/lib dist/macos-arm64/licenses
+	go build -tags system_ladybug -trimpath -ldflags '-r=@executable_path/../lib' -o dist/macos-arm64/bin/bigbrain ./cmd/bigbrain
+	cp -L "$(ladybug_dir)/liblbug.0.dylib" dist/macos-arm64/lib/
+	cp spikes/ladybug/LICENSES/*.txt dist/macos-arm64/licenses/
+
 setup:
 	@./scripts/download-ladybug.sh
 
