@@ -2,7 +2,7 @@
 kadai: task
 id: "BB-0034"
 title: "06 · Codex plugin"
-status: "in_progress"
+status: "done"
 depends_on: [BB-0006, BB-0050]
 ---
 Deliver a local Codex plugin that can resume work with source-linked BigBrain memories, review a handoff before saving it, and inspect both workflows in a browser. The existing Go daemon owns LadybugDB and serves CLI, hooks and viewer through the Unix socket. Reuse the [completed Integration work](../05-integration/phase.md) for handoffs, MCP and graph explanations.
@@ -39,3 +39,13 @@ Collection-wide browsing, source freshness, lesson publication UI and relationsh
 | P5 | WP-13 | [BB-0048 · Optional · Embed the shared viewer on verified MCP Apps hosts](13-embedded-viewer.md) |
 | P6 | WP-14 | [BB-0049 · Document manual installation, upgrade and removal](14-manual-distribution.md) |
 | P6 | WP-15 | [BB-0050 · Verify offline installation and continuity across sessions](15-release-verification.md) |
+
+<!-- kadai:log:start -->
+
+## Log
+
+### 2026-11-27T02:33:57-03:00
+
+Completed the local macOS ARM64 release after reviewing each work package with simple-code. The optional embedded adapter remains gated on a verified rendering host. See the [delivery report, commits and validation](references/release-report.md).
+
+<!-- kadai:log:end -->
