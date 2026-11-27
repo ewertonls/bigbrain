@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/ewertonls/bigbrain/internal/protocol"
@@ -21,7 +22,49 @@ func verifyIntegration(bin, root string) []string {
 	check(err)
 	verifyAgentHandoff(cli{bin: bin, db: filepath.Join(root, "handoff")}, filepath.Join(filepath.Dir(bin), "..", "integrations"))
 	verifyAdapterAndGraph(cli{bin: bin, db: filepath.Join(root, "adapter")})
-	return []string{"agent_handoff", "mcp_cli_parity", "scoped_graph_view"}
+	verifyDirectoryProject(cli{bin: bin, db: filepath.Join(root, "directory-db"), dir: filepath.Join(root, "directory-project")})
+	return []string{"agent_handoff", "mcp_cli_parity", "scoped_graph_view", "directory_project"}
+}
+
+func verifyDirectoryProject(c cli) {
+	defer shutdown(c)
+	c.env = []string{"GIT_TRACE=1"}
+	child := filepath.Join(c.dir, "docs")
+	check(os.MkdirAll(child, 0700))
+	decode[json.RawMessage](c.run("project", "init", "orbit"))
+	id, err := os.ReadFile(filepath.Join(c.dir, ".bigbrain-project"))
+	check(err)
+	require(string(id) == "orbit\n", "init stored unexpected project ID: %q", id)
+	c.dir = child
+	local := write(c, recordArgs("local", "Project decision", "Project notes")...).ID
+	global := write(c, recordArgs("global", "Shared practice", "Guide", "--global")...).ID
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	session, call := connectMCP(ctx, c)
+	defer session.Close()
+	queryIDs(decode[matches](call("query", map[string]string{"id": local})), local)
+	queryIDs(decode[matches](call("query", map[string]string{"id": global})), global)
+	saved := decode[writeResult](call("record", map[string]string{"key": "mcp", "text": "Another decision", "source": "Notes"}))
+	queryIDs(query(c, "--project", "orbit", "--id", saved.ID), saved.ID)
+	queryIDs(query(c, "--global", "--id", saved.ID))
+
+	// Malformed local markers must produce a diagnostic instead of hanging or
+	// silently selecting the parent project.
+	marker := filepath.Join(child, ".bigbrain-project")
+	check(syscall.Mkfifo(marker, 0600))
+	expectError(c.run("db-path"), "PROJECT_CONFIG_ERROR")
+	check(os.Remove(marker))
+	check(os.Symlink("missing-project-file", marker))
+	expectError(c.run("project", "init", "nested"), "PROJECT_CONFIG_ERROR")
+	check(os.Remove(marker))
+
+	// A nested Git repository uses its own worktree configuration.
+	git(child, "init", "-q")
+	expectError(c.run("db-path"), "PROJECT_NOT_CONFIGURED")
+	c.env = []string{"PATH=" + filepath.Join(child, "no-bin")}
+	expectError(c.run("db-path"), "PROJECT_UNAVAILABLE")
+	expectError(c.run("project", "init", "nested"), "PROJECT_UNAVAILABLE")
+	queryIDs(query(c, "--project", "orbit", "--id", saved.ID), saved.ID)
 }
 
 func verifyAdapterAndGraph(c cli) {
