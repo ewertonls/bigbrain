@@ -69,6 +69,19 @@ func hookRecall(ctx context.Context, start time.Time, db string, e hookEvent) st
 	if err != nil {
 		return ""
 	}
+	eventName := e.Event
+	if eventName == "SessionStart" {
+		eventName += "/" + e.Source
+	}
+	if err = updateState(ctx, b.sessionFile(dir, "hooks"), func(h *observedHooks) error {
+		if *h == nil {
+			*h = observedHooks{}
+		}
+		(*h)[eventName] = start.UTC()
+		return nil
+	}); err != nil {
+		return ""
+	}
 	policy, err := readState[sessionPolicy](b.sessionFile(dir, "policy"))
 	if err != nil || policy.Paused {
 		return ""

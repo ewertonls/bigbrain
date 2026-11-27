@@ -10,7 +10,7 @@ saving automatic capture. When the user explicitly asks to remember something,
 use the authorized project record operation, preserving its payload and key
 across retries. Global publication is a separate reviewed operation.
 
-Stage with `bigbrain handoff stage --session SESSION`, passing one JSON object
+Stage with `bigbrain handoff stage --automatic --session SESSION`, passing one JSON object
 on stdin. Use the actual host session identifier. For example:
 
 ```json

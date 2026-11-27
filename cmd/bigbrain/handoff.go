@@ -136,6 +136,7 @@ func handoffCommand(o *options, args []string) (any, error) {
 	o.register(f)
 	var p pluginOptions
 	p.register(f)
+	automatic := f.Bool("automatic", false, "respect paused automatic capture when staging")
 	id := f.String("id", "", "draft ID")
 	revision := f.Int("revision", 0, "expected draft revision")
 	if err := o.parseFlags(f, args[1:]); err != nil {
@@ -153,6 +154,15 @@ func handoffCommand(o *options, args []string) (any, error) {
 	dir, err := p.stateDir()
 	if err != nil {
 		return nil, err
+	}
+	if action == "stage" && *automatic {
+		policy, err := readState[sessionPolicy](b.sessionFile(dir, "policy"))
+		if err != nil {
+			return nil, err
+		}
+		if policy.Paused {
+			return nil, invalid("Automatic capture is paused for this session.")
+		}
 	}
 	path := b.sessionFile(dir, "drafts")
 	if action == "save" {

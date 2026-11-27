@@ -145,6 +145,8 @@ func (v *viewer) api(ctx context.Context, r *http.Request) (any, error) {
 		return nil, invalid("Workspace binding changed. Reopen the viewer.")
 	}
 	switch r.URL.Path {
+	case "/api/automation", "/api/preview", "/api/policy":
+		return v.automation(ctx, b, r)
 	case "/api/drafts", "/api/edit", "/api/save", "/api/dismiss":
 		if b.Session == "" {
 			return nil, invalid("Reopen with --session SESSION to review handoffs.")

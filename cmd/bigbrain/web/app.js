@@ -124,6 +124,7 @@ async function navigate(name) {
     const selected=b.dataset.page===name;b.setAttribute('aria-pressed',selected);el(b.dataset.page).hidden=!selected;
   }
   document.querySelector('.scope').hidden=name!=='explorer';
+  if(name==='automation'){const {loadAutomation}=await import('./automation.js');await loadAutomation()}
   if(name==='review'){const {loadReview}=await import('./review.js');await loadReview()}
 }
 document.querySelector('nav').onclick=e=>{
