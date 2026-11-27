@@ -15,7 +15,7 @@ import (
 type daemonCall func(context.Context, string, any) (json.RawMessage, error)
 
 func NewServer(projectScope string, call daemonCall) *mcp.Server {
-	scopeInstruction := "Supply scope on every call. To enable project defaults, start this server in a configured Git worktree."
+	scopeInstruction := "Supply scope on every call. To enable project defaults, start this server in a configured project directory or one of its subdirectories."
 	if projectScope != "" {
 		scopeInstruction = "Omitting scope selects " + projectScope + ". Reads then include global memories unless include_global is false. review-weight requires an explicit global scope."
 	}

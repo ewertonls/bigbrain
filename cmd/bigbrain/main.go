@@ -37,7 +37,7 @@ Commands:
   history          Inspect a memory and its visible relationships.
   delete           Delete a memory and its incident relationships.
   db-path          Print the absolute path to the shared database file.
-  project init ID  Save the project ID for this Git repository.
+  project init ID  Save the project ID for this directory or Git repository.
   status           Show the daemon state.
   shutdown         Stop the daemon.
   help [COMMAND]   Show general or command-specific help.
@@ -205,7 +205,7 @@ func execute(args []string, options *options) (any, error) {
 
 	scope := scopeOptions{}
 	flags.StringVar(&scope.project, "project", "", "select project `ID`")
-	flags.BoolVar(&scope.current, "current-project", false, "use the project configured for this Git worktree")
+	flags.BoolVar(&scope.current, "current-project", false, "use the project configured for this directory or Git worktree")
 	globalUsage := "select the global collection"
 	if projectOnlyCommand(command) {
 		globalUsage = "unavailable for this project operation"

@@ -56,6 +56,42 @@ func TestDBPathBeforeFirstWrite(t *testing.T) {
 	}
 }
 
+func TestDirectoryProjectsWithoutGitExecutable(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("PATH", t.TempDir())
+	t.Chdir(root)
+	for range 2 {
+		if _, err := initProject("parent"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := initProject("other"); err == nil {
+		t.Fatal("init replaced an existing project")
+	}
+	child := filepath.Join(root, "child")
+	if err := os.Mkdir(child, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(child)
+	if scope, err := configuredProjectScope(); err != nil || scope != "project:parent" {
+		t.Fatalf("inherited scope = %q, err = %v", scope, err)
+	}
+	if _, err := initProject("child"); err != nil {
+		t.Fatal(err)
+	}
+	if scope, err := configuredProjectScope(); err != nil || scope != "project:child" {
+		t.Fatalf("nested scope = %q, err = %v", scope, err)
+	}
+	if err := os.WriteFile(localProjectFile, []byte("bad id\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := configuredProjectScope()
+	var problem *protocol.Error
+	if !errors.As(err, &problem) || problem.Code != "PROJECT_CONFIG_ERROR" {
+		t.Fatalf("invalid nested project file: got %v", err)
+	}
+}
+
 func TestCommandHelp(t *testing.T) {
 	for _, args := range [][]string{
 		{"query", "-h"}, {"query", "--help"}, {"help", "query"},

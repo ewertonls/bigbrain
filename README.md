@@ -45,7 +45,7 @@ docker build --platform linux/arm64 --target package --output type=local,dest=di
 Copy the resulting `dist/bigbrain` directory to the Linux ARM64 machine and
 run `bin/bigbrain` from that directory or add `bin` to your PATH. Keep the
 bundled `lib` directory beside `bin`. Git is needed for shared worktree
-configuration. With an explicit project ID, the CLI can also run outside Git.
+configuration. Standalone project directories work without Git.
 
 The database defaults to `$XDG_DATA_HOME/bigbrain`, or
 `~/.local/share/bigbrain` when the variable is unset. Use `--db DIR` to select
@@ -127,8 +127,15 @@ known. A new link records its creation time and starts with zero activations.
 Older links omit attributes that were never recorded. Reading a link leaves
 its attributes intact.
 
-`project init` stores the chosen ID in the Git common directory, so separate
-worktrees share it. Once configured, CLI writes such as `record` and
+Run `bigbrain project init ID` once in the project directory. Outside Git,
+it saves the ID in `.bigbrain-project` in the current directory. The CLI
+and MCP use the nearest such file when started in a subdirectory. Initializing
+a nested directory gives it its own project. In a Git repository, the Git
+common directory takes precedence and all linked worktrees share the ID.
+If Git is unavailable in a worktree, pass an explicit scope.
+The database stays in its usual location.
+
+Once configured, CLI writes such as `record` and
 `import` default to that project. Reads (`query`, `graph`, `history`, and
 `feedback-history`) include the configured project and the global collection.
 Use `--include-global=false` to read only the configured project.
@@ -136,7 +143,7 @@ Use `--include-global=false` to read only the configured project.
 An explicit `--current-project` or `--project ID` selects just that project
 unless you add `--include-global` on a read. Use `--global` to select the
 global collection directly. Without a configured project, supply a scope or
-run `bigbrain project init ID` in the repository.
+run `bigbrain project init ID` in the project directory.
 
 Use `publish` to share a reviewed lesson from a project. Use the project scope to
 link a project memory to a global memory in either direction. The project
@@ -402,7 +409,7 @@ directory used by the CLI. Clients using `mcpServers` accept this entry.
 }
 ```
 
-Start the MCP process with its working directory inside the Git repository
+Start the MCP process with its working directory inside the project directory
 configured by `bigbrain project init ID`. It reads the project once at startup.
 Omit `scope` to write to that project or read from both the project and global
 collection. For example, `query` accepts `{"text":"Orbit"}`, or
@@ -411,10 +418,10 @@ An explicit `"scope":"project:orbit"` reads just that project unless you
 also pass `"include_global":true`. Use `"scope":"global"` for global-only
 operations. The `review-weight` tool always requires an explicit global scope.
 
-When started outside a configured repository, the server requires `scope`
+When started outside a configured project, the server requires `scope`
 on every call. An invalid project file also requires explicit scopes and the
 server reports the configuration error on stderr. Restart the server after
-configuring or switching repositories.
+configuring or switching projects.
 Writes require the caller's saved
 `key`. Tool results contain the CLI's v1 envelope in `structuredContent`
 and as JSON text in `content`. Domain errors set `isError` and carry the

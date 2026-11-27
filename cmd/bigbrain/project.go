@@ -10,14 +10,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/ewertonls/bigbrain/internal/protocol"
 )
 
+const localProjectFile = ".bigbrain-project"
+
 var (
-	errProjectUnavailable   = protocol.NewError("PROJECT_UNAVAILABLE", "Run this command in a Git worktree, or supply --project ID explicitly.")
-	errProjectNotConfigured = protocol.NewError("PROJECT_NOT_CONFIGURED", "Run bigbrain project init ID in this worktree.")
+	errProjectUnavailable   = protocol.NewError("PROJECT_UNAVAILABLE", "Run bigbrain project init ID in the project directory, or supply --project ID explicitly.")
+	errProjectNotConfigured = protocol.NewError("PROJECT_NOT_CONFIGURED", "Run bigbrain project init ID in the project directory.")
 )
 
 func projectOnlyCommand(name string) bool {
@@ -67,9 +70,12 @@ func initProject(id string) (any, error) {
 	if !protocol.ValidProjectID(id) {
 		return nil, invalid("Run bigbrain project init ID with a project ID of up to 128 ASCII letters, digits, dots, underscores, or hyphens, starting with a letter or digit.")
 	}
-	path, err := projectFile()
+	path, err := gitProjectFile()
 	if err != nil {
 		return nil, err
+	}
+	if path == "" {
+		path = localProjectFile
 	}
 	if err := writeProject(path, id); err != nil {
 		return nil, err
@@ -78,9 +84,18 @@ func initProject(id string) (any, error) {
 }
 
 func configuredProjectScope() (string, error) {
-	path, err := projectFile()
+	path, err := gitProjectFile()
 	if err != nil {
 		return "", err
+	}
+	if path == "" {
+		path, err = findAncestorFile(localProjectFile)
+		if err != nil {
+			return "", err
+		}
+		if path == "" {
+			return "", errProjectUnavailable
+		}
 	}
 	id, err := readProject(path)
 	if err != nil {
@@ -89,13 +104,33 @@ func configuredProjectScope() (string, error) {
 	return "project:" + id, nil
 }
 
-func projectFile() (string, error) {
+// An empty path selects directory-based configuration outside Git.
+func gitProjectFile() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--path-format=absolute", "--git-common-dir")
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	output, err := cmd.Output()
+	if errors.Is(err, exec.ErrNotFound) {
+		marker, err := findAncestorFile(".git")
+		if err != nil {
+			return "", err
+		}
+		if marker != "" || os.Getenv("GIT_DIR") != "" || os.Getenv("GIT_WORK_TREE") != "" {
+			return "", protocol.NewError("PROJECT_UNAVAILABLE", "Install Git to resolve this worktree, or supply --project ID explicitly.")
+		}
+		return "", nil
+	}
 	if err != nil {
-		return "", errProjectUnavailable
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			for line := range bytes.Lines(exit.Stderr) {
+				if bytes.HasPrefix(line, []byte("fatal: not a git repository (")) {
+					return "", nil
+				}
+			}
+		}
+		return "", protocol.NewError("PROJECT_UNAVAILABLE", "Cannot locate the Git directory. Check the repository or supply --project ID explicitly.")
 	}
 	dir := string(bytes.TrimSuffix(output, []byte("\n")))
 	if !filepath.IsAbs(dir) {
@@ -104,19 +139,51 @@ func projectFile() (string, error) {
 	return filepath.Join(dir, "bigbrain-project"), nil
 }
 
+func findAncestorFile(name string) (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	dir, err = filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", err
+	}
+	for {
+		path := filepath.Join(dir, name)
+		if _, err := os.Lstat(path); err == nil {
+			return path, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", projectConfigError(path)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", nil
+		}
+		dir = parent
+	}
+}
+
 func readProject(path string) (string, error) {
-	file, err := os.Open(path)
+	// Opening a FIFO normally blocks before we can check its type.
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if errors.Is(err, os.ErrNotExist) {
+		if _, linkErr := os.Lstat(path); !errors.Is(linkErr, os.ErrNotExist) {
+			return "", projectConfigError(path)
+		}
 		return "", errProjectNotConfigured
 	}
 	if err != nil {
-		return "", projectConfigError()
+		return "", projectConfigError(path)
 	}
 	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return "", projectConfigError(path)
+	}
 	value, err := io.ReadAll(io.LimitReader(file, 130))
 	id := strings.TrimSuffix(string(value), "\n")
 	if err != nil || !protocol.ValidProjectID(id) {
-		return "", projectConfigError()
+		return "", projectConfigError(path)
 	}
 	return id, nil
 }
@@ -124,13 +191,13 @@ func readProject(path string) (string, error) {
 func writeProject(path, id string) error {
 	file, err := os.CreateTemp(filepath.Dir(path), ".bigbrain-project-")
 	if err != nil {
-		return projectConfigError()
+		return projectConfigError(path)
 	}
 	defer os.Remove(file.Name())
 	_, writeErr := io.WriteString(file, id+"\n")
 	closeErr := file.Close()
 	if writeErr != nil || closeErr != nil {
-		return projectConfigError()
+		return projectConfigError(path)
 	}
 
 	// Publish a complete file without replacing an existing choice.
@@ -141,16 +208,16 @@ func writeProject(path, id string) error {
 			return err
 		}
 		if id != saved {
-			return protocol.NewError("PROJECT_ALREADY_CONFIGURED", "This Git repository already has a different project ID.")
+			return protocol.NewError("PROJECT_ALREADY_CONFIGURED", "This directory is already configured with a different project ID.")
 		}
 		return nil
 	}
 	if err != nil {
-		return projectConfigError()
+		return projectConfigError(path)
 	}
 	return nil
 }
 
-func projectConfigError() error {
-	return protocol.NewError("PROJECT_CONFIG_ERROR", "Check the bigbrain-project file in the Git common directory and its permissions.")
+func projectConfigError(path string) error {
+	return protocol.NewError("PROJECT_CONFIG_ERROR", "Check the project file "+path+" and its permissions.")
 }
