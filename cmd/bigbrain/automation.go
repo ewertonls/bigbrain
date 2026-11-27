@@ -42,15 +42,15 @@ func (v *viewer) automation(ctx context.Context, b binding, r *http.Request) (an
 			return nil, err
 		}
 	}
-	policy, err := readState[sessionPolicy](path)
-	if err != nil {
-		return nil, err
-	}
-	s, err := readState[recallState](b.sessionFile(v.dir, "recall"))
-	if err != nil {
-		return nil, err
-	}
 	if r.URL.Path == "/api/preview" {
+		policy, err := readState[sessionPolicy](path)
+		if err != nil {
+			return nil, err
+		}
+		s, err := readState[recallState](b.sessionFile(v.dir, "recall"))
+		if err != nil {
+			return nil, err
+		}
 		b.IncludeGlobal = !policy.ProjectOnly
 		in := recallInput{Bootstrap: !policy.DisableBootstrap, IDs: s.seeds()}
 		matches, fallback, err := recallMatches(ctx, b, v.dir, in, true)
@@ -58,6 +58,18 @@ func (v *viewer) automation(ctx context.Context, b binding, r *http.Request) (an
 			return nil, err
 		}
 		return projectContext(matches, fallback, nil), nil
+	}
+	return v.sessionAutomation(b)
+}
+
+func (v *viewer) sessionAutomation(b binding) (any, error) {
+	policy, err := readState[sessionPolicy](b.sessionFile(v.dir, "policy"))
+	if err != nil {
+		return nil, err
+	}
+	s, err := readState[recallState](b.sessionFile(v.dir, "recall"))
+	if err != nil {
+		return nil, err
 	}
 	hooks, err := readState[observedHooks](b.sessionFile(v.dir, "hooks"))
 	if err != nil {

@@ -192,6 +192,7 @@ func (s *serverState) routes() http.Handler {
 	mux.HandleFunc("POST /v1/link", operation(s, s.database.Link))
 	mux.HandleFunc("POST /v1/invalidate", operation(s, s.database.Invalidate))
 	mux.HandleFunc("POST /v1/delete", operation(s, s.database.Delete))
+	mux.HandleFunc("POST /v1/browse", operation(s, s.database.Browse))
 	mux.HandleFunc("POST /v1/history", operation(s, s.database.History))
 	mux.HandleFunc("POST /v1/query", operation(s, s.database.Query))
 	mux.HandleFunc("POST /v1/shutdown", func(w http.ResponseWriter, r *http.Request) {

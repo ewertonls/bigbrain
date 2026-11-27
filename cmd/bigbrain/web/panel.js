@@ -24,6 +24,16 @@ window.addEventListener("message", ({ source, origin, data }) => {
     source !== window.parent || data?.jsonrpc !== "2.0" ||
     (hostOrigin !== "*" && origin !== hostOrigin)
   ) return;
+  if (data.method === "ui/notifications/tool-result") {
+    window.dispatchEvent(
+      new CustomEvent("bigbrain-result", { detail: data.params }),
+    );
+    return;
+  }
+  if (data.method === "ui/notifications/host-context-changed") {
+    applyTheme(data.params?.theme);
+    return;
+  }
   if (data.method === "ui/resource-teardown") {
     send({ id: data.id, result: {} });
     return;
@@ -37,21 +47,25 @@ window.addEventListener("message", ({ source, origin, data }) => {
   else call.resolve(data.result);
 });
 
-try {
-  await request("ui/initialize", {
-    appInfo: { name: "BigBrain Explorer", version: "1.0.0" },
+function applyTheme(theme) {
+  if (theme === "light" || theme === "dark") {
+    document.documentElement.dataset.theme = theme;
+  }
+}
+async function connectHost() {
+  const result = await request("ui/initialize", {
+    appInfo: { name: "BigBrain", version: "2.0.0" },
     appCapabilities: {},
     protocolVersion: "2026-01-26",
   });
+  applyTheme(result?.hostContext?.theme);
   send({ method: "ui/notifications/initialized" });
-  await mountExplorer(async (operation, args = {}) => {
-    const name = operation === "status" ? "explorer" : "explorer_" + operation;
-    const result = await request("tools/call", { name, arguments: args });
-    if (result.isError) {
-      throw new Error(result.content?.[0]?.text || "Explorer request failed.");
-    }
-    return result._meta.bigbrain;
-  });
-} catch (error) {
-  document.getElementById("connection").textContent = error.message;
+}
+async function panelApi(operation, args = {}) {
+  const name = operation === "status" ? "explorer" : "explorer_" + operation;
+  const result = await request("tools/call", { name, arguments: args });
+  if (result.isError) {
+    throw new Error(result.content?.[0]?.text || "Request failed.");
+  }
+  return result._meta.bigbrain;
 }

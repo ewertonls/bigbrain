@@ -15,8 +15,9 @@ import (
 const contextLimit = 8192
 
 type emittedMemory struct {
-	ID   string `json:"id"`
-	Hash string `json:"hash"`
+	ID     string `json:"id"`
+	Hash   string `json:"hash"`
+	Reason string `json:"reason,omitempty"`
 }
 
 type recallReceipt struct {
@@ -104,7 +105,7 @@ func projectContext(matches []protocol.Match, fallback string, seen map[string]b
 		out.Write(row)
 		out.WriteByte('\n')
 		emitted[m.ID] = true
-		r.Memories = append(r.Memories, emittedMemory{m.ID, hash})
+		r.Memories = append(r.Memories, emittedMemory{ID: m.ID, Hash: hash, Reason: m.Reason.Kind})
 	}
 	text := out.String()
 	r.Bytes = len(text)

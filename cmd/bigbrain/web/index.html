@@ -1,34 +1,4 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>BigBrain</title>
-    <link rel="stylesheet" href="/style.css">
-  </head>
-  <body>
-    <header><strong>BigBrain</strong><nav aria-label="Screens"><button data-page="explorer" aria-pressed="true">Explorer</button><button data-page="review" aria-pressed="false">Session review</button><button data-page="automation" aria-pressed="false">Automation</button></nav><span id="connection" role="status">Connecting…</span></header>
-    {{template "scope"}}
-    <main>
-      {{template "explorer"}}
-      <section id="review" hidden>
-        <h1>What will be saved?</h1>
-        <p id="review-message" role="status"></p>
-        <div id="drafts"></div>
-        <div
-          class="actions"><button id="save-selected" class="primary">Save to project</button><button id="dismiss-selected">Dismiss selected</button></div>
-      </section>
-      <section id="automation" hidden>
-        <h1>What entered the context?</h1>
-        <div id="last-recall" aria-live="polite"></div>
-        <div
-          class="actions"><button id="preview">Preview next context</button><button id="pause">Pause for this session</button></div>
-        <pre id="preview-text"></pre>
-        <h2>Session policy</h2>
-        <div id="policies"></div>
-        <p id="hook-state" class="meta"></p>
-      </section>
-    </main>
-    <script type="module" src="/app.js"></script>
-  </body>
-</html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BigBrain</title><link rel="stylesheet" href="/style.css"></head><body>
+{{template "workspace"}}{{template "templates"}}
+<script src="/client.js" defer></script><script src="/dom.js" defer></script><script src="/explorer.js" defer></script><script src="/network.js" defer></script><script src="/review.js" defer></script><script src="/automation.js" defer></script><script src="/app.js" defer></script>
+</body></html>

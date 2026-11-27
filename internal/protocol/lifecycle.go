@@ -37,12 +37,13 @@ type HistoryResult struct {
 }
 
 type RelatedMemory struct {
-	ID     string `json:"id"`
-	Scope  string `json:"scope"`
-	Type   string `json:"type"`
-	Status string `json:"status"`
-	Source string `json:"source"`
-	Path   Path   `json:"path"`
+	Excerpt string `json:"excerpt,omitempty"`
+	ID      string `json:"id"`
+	Scope   string `json:"scope"`
+	Type    string `json:"type"`
+	Status  string `json:"status"`
+	Source  string `json:"source"`
+	Path    Path   `json:"path"`
 }
 
 func (r MemoryWriteRequest) Validate() error {

@@ -12,3 +12,7 @@ require an explicit selection.
 For interactive search and source inspection, run `bigbrain ui` from the
 workspace. Open the printed loopback URL locally. Keep its launch fragment
 private. Stop the viewer process when finished.
+
+In Codex Desktop, the optional BigBrain Explorer conversation panel opens
+directly on recent memories. Use Graph to inspect stored relationships. Use
+Memories for a specific retrieval explanation. Both show scope and source.

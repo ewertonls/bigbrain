@@ -141,6 +141,7 @@ func verifyAdapterAndGraph(c cli) {
 func startMCPClient(ctx context.Context, c cli, args ...string) *mcp.ClientSession {
 	cmd := exec.CommandContext(ctx, c.bin, append([]string{"--db", c.db, "mcp"}, args...)...)
 	cmd.Dir = c.dir
+	cmd.Env = append(os.Environ(), c.env...)
 	cmd.Stderr = os.Stderr
 	client := mcp.NewClient(&mcp.Implementation{Name: "acceptance", Version: "1"}, nil)
 	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)

@@ -31,4 +31,8 @@ PASS in the actual Codex Desktop application (com.openai.codex, 26.1120.50957, m
 Simple-code review consolidated the Explorer markup, JavaScript, scope checks and daemon reads across the browser and desktop. An empty workspace argument fails rather than opening the general-purpose MCP server. The acceptance test covers entrypoint discovery, the bundled resource, empty launch arguments, source delivery in app metadata, cross-project rejection and a changed binding. Passed make test, all six make test-integration scenarios, go vet for the changed packages, the macOS package build and the browser regression for Explorer, Session review and Automation.
 
 
+### 2026-11-27T03:16:30-03:00
+
+Redesigned the workspace and separated contextual MCP cards from the conversation panel. Verified scoped browse, graph and provenance, receipt budgets, read-only defaults and explicit reviewed writes. See [design QA and screenshots](references/design-qa.md) for the tested surfaces and host limitations.
+
 <!-- kadai:log:end -->

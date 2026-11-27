@@ -1,37 +1,15 @@
-{{define "scope"}}
-<div class="scope">
-  <label>Scope <select id="scope"><option value="project">Project</option><option value="global">Global only</option></select></label>
-  <label><input type="checkbox" id="global" checked> Include global</label>
-</div>
+{{define "brand"}}<svg class="brand-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M12 5c-2-4-7-2-7 2-3 0-4 4-2 6-2 3 0 6 3 6 0 3 4 3 6 1M12 5c2-4 7-2 7 2 3 0 4 4 2 6 2 3 0 6-3 6 0 3-4 3-6 1M5 7l3 2M3 13l4-1 1 3M19 7l-3 2M21 13l-4-1-1 3"/></g></svg>{{end}}
+{{define "workspace"}}
+<header class="top"><div class="brand">{{template "brand"}}BigBrain</div><span id="connection" role="status">Connecting…</span><button data-page="settings">Settings</button></header>
+<div class="scope"><label>Scope <select id="scope"><option value="project">Project</option><option value="global">Global only</option></select></label><label><input type="checkbox" id="global"> Include global</label></div>
+<nav aria-label="Workspace"><button data-page="overview" aria-pressed="true">Overview</button><button data-page="memories">Memories</button><button data-page="graph">Graph</button><button data-page="activity">Activity</button><button data-page="review">Review</button></nav>
+<main><div id="notice" role="status">Loading project memory…</div><div id="page"></div></main>
 {{end}}
-{{define "explorer"}}
-<section id="explorer">
-  <form id="search">
-    <label for="query">Search memories</label>
-    <div class="actions">
-      <input id="query" type="search" required placeholder="Search for a decision or evidence">
-      <button class="primary">Search</button>
-    </div>
-  </form>
-  <p role="status" id="search-status"></p>
-  <div id="results" hidden>
-    <label>Filter loaded results <input id="filter" type="search"></label>
-    <div class="choices" id="matches"></div>
-  </div>
-  <section id="selection" hidden>
-    <button id="back-results" type="button">Back to results</button>
-    <h1>Why was this memory retrieved?</h1>
-    <p id="reason"></p>
-    <div class="surface">
-      <div class="heading">
-        <h2>Retrieval path</h2>
-        <label>View <select id="mode"><option>List</option><option>Graph</option></select></label>
-      </div>
-      <div id="paths"></div>
-      <p id="counts" class="meta"></p>
-    </div>
-    <section id="inspector" aria-live="polite"></section>
-    <div id="history"></div>
-  </section>
-</section>
+{{define "review"}}
+<div id="review-message" role="status"></div><div id="drafts"></div>
+<div class="actions" id="review-actions"><button id="save-selected" class="primary" disabled>Save selected</button><button id="dismiss-selected" disabled>Dismiss selected</button></div>
 {{end}}
+{{define "automation"}}
+<div id="last-recall"></div><div class="actions"><button id="preview">Preview next context</button><button id="pause">Pause for this session</button></div><pre id="preview-text"></pre><h2>Session policy</h2><div id="policies"></div><p id="hook-state"></p>
+{{end}}
+{{define "templates"}}<template id="review-template">{{template "review"}}</template><template id="automation-template">{{template "automation"}}</template>{{end}}

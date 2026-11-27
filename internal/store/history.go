@@ -103,13 +103,17 @@ func (s *Store) visibleEdges(r protocol.HistoryRequest, activeOnly bool) ([]prot
 		end = " ORDER BY edge.id LIMIT " + strconv.Itoa(r.Limit+1)
 	}
 	edges := make([]protocol.RelatedMemory, 0)
+	excerpt := "''"
+	if !activeOnly {
+		excerpt = "left(neighbor.text, 100)"
+	}
 	join, attributes := edgeAttributeProjection(r.IncludeGlobal)
 	for _, walk := range []struct{ pattern, direction string }{{"-[edge:Evidence]->", "forward"}, {"<-[edge:Evidence]-", "reverse"}} {
 		rows, err := s.query("MATCH (seed:Memory {id:$id})"+walk.pattern+`(neighbor:Memory)
 WHERE (seed.scope=$scope OR seed.scope=$extraScope) AND (edge.scope=$scope OR edge.scope=$extraScope)
   AND (neighbor.scope=$scope OR neighbor.scope=$extraScope)`+filter+join+`
 RETURN neighbor.id, neighbor.scope, neighbor.memory_type, neighbor.status, neighbor.source,
-       edge.id, edge.scope, edge.kind, edge.source, `+attributes+`, coalesce(edge.created_at, '')`+end, params)
+       edge.id, edge.scope, edge.kind, edge.source, `+attributes+`, coalesce(edge.created_at, ''), `+excerpt+end, params)
 		if err != nil {
 			return nil, err
 		}
@@ -130,6 +134,7 @@ RETURN neighbor.id, neighbor.scope, neighbor.memory_type, neighbor.status, neigh
 			if !okWeight || !okConfidence || !okActivations || !okLastAt || !okCreatedAt {
 				return nil, errors.New("invalid relationship attributes")
 			}
+			excerpt, _ := row[14].(string)
 			from, to := r.ID, field[0]
 			if walk.direction == "reverse" {
 				// The forward row already represents this self-link.
@@ -139,7 +144,7 @@ RETURN neighbor.id, neighbor.scope, neighbor.memory_type, neighbor.status, neigh
 				from, to = to, from
 			}
 			edges = append(edges, protocol.RelatedMemory{
-				ID: field[0], Scope: field[1], Type: field[2], Status: field[3], Source: field[4],
+				Excerpt: excerpt, ID: field[0], Scope: field[1], Type: field[2], Status: field[3], Source: field[4],
 				Path: protocol.Path{
 					RelationshipID: field[5], Scope: field[6], Kind: field[7], Source: field[8],
 					FromID: from, ToID: to, Direction: walk.direction, Weight: weight, Confidence: confidence,

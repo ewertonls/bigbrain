@@ -11,3 +11,7 @@ If the search is empty, continue with the current task.
 For model context, use `bigbrain --json context --text "daemon ownership"`.
 The result includes cited excerpts and byte counts. Use `--preview` to inspect
 a selection without recording a receipt, or repeat `--id ID` for known memories.
+
+When the user asks for an inline receipt and the optional MCP companion is
+available, use `recall_card` without text for the pinned session. For a
+requested preview, pass the search text and label the result as a preview.

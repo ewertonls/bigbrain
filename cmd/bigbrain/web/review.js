@@ -1,160 +1,175 @@
-import { api } from "./client.js";
-import { action, el, element } from "./explorer.js";
-const selected = new Set();
-let drafts = [], busy = false;
-const states = {
-  draft: "Draft",
-  saving: "Saving / awaiting confirmation",
-  partial: "Partially saved",
-  uncertain: "Save status unknown",
-  saved: "Saved",
-  dismissed: "Dismissed",
-};
-function field(label, value, multiline = false) {
-  const wrapper = element("label", label);
-  const input = element(multiline ? "textarea" : "input");
-  input.value = value || "";
-  wrapper.append(input);
-  return { wrapper, input };
-}
-function draftView(d) {
-  const section = element("article");
-  section.className = "surface";
-  const title = element("label");
-  const check = element("input");
-  check.type = "checkbox";
-  check.checked = selected.has(d.id);
-  check.disabled = busy || ["saved", "dismissed"].includes(d.status);
-  check.onchange = () => {
-    if (check.checked) selected.add(d.id);
-    else selected.delete(d.id);
-    buttons();
-  };
-  title.append(
-    check,
-    document.createTextNode(
-      " " + (states[d.status] || d.status) + " · " +
-        (d.content.memory.type === "procedural"
-          ? "Procedure"
-          : d.content.memory.type),
-    ),
-  );
-  section.append(
-    title,
-    element("h2", d.content.memory.text),
-    element("p", "Source · " + d.content.memory.source),
-  );
-  const ev = d.content.evidence;
-  if (ev) {
-    const evidence = element("div");
-    evidence.className = "thread";
-    evidence.append(
-      element("small", "Supporting observation"),
-      element("p", ev.text),
-      element("p", "Source · " + ev.source),
+function mountReview(api, writable, initial) {
+  const rows = el("drafts"),
+    message = el("review-message"),
+    save = el("save-selected"),
+    dismiss = el("dismiss-selected");
+  const selected = new Map();
+  let busy = false;
+  el("review-actions").hidden = !writable;
+  function controls() {
+    save.disabled = busy || !selected.size;
+    save.textContent = selected.size
+      ? "Save " + selected.size + " to project"
+      : "Save selected";
+    dismiss.disabled = busy || !selected.size ||
+      [...selected.values()].some((d) => d.status !== "draft");
+  }
+  function draw(ds) {
+    if (!rows.isConnected) return;
+    rows.replaceChildren();
+    selected.clear();
+    const pending = ds.filter((d) =>
+      !["saved", "dismissed"].includes(d.status)
     );
-    section.append(evidence);
-  }
-  for (
-    const [title, items] of [["Open questions", d.content.open_questions], [
-      "Next steps",
-      d.content.next_steps,
-    ]]
-  ) {
-    if (items?.length) {
-      section.append(element("h3", title));
-      const list = element("ul");
-      for (const text of items) list.append(element("li", text));
-      section.append(list);
+    if (!pending.length) {
+      rows.append(
+        element("p", "No pending handoffs in this session.", "empty"),
+      );
     }
-  }
-  section.append(element("p", "Save destination · " + d.origin.scope));
-  const details = element("details");
-  details.append(element("summary", "Inspect the planned writes"));
-  const operations = element("ol");
-  for (
-    const text of [
-      "Record memory",
-      ...(ev
-        ? [
-          "Record supporting observation",
-          "Link the decision to the observation · justified_by",
-        ]
-        : []),
-    ]
-  ) operations.append(element("li", text));
-  details.append(operations);
-  section.append(details);
-  if (d.status === "draft") {
-    const edit = element("details");
-    edit.append(element("summary", "Edit draft"));
-    const content = structuredClone(d.content), inputs = [];
-    for (
-      const [kind, m] of [["Memory", content.memory], [
-        "Evidence",
-        content.evidence,
-      ]]
-    ) {
-      if (!m) continue;
-      for (const key of ["text", "type", "source"]) {
-        const { wrapper, input } = field(
-          kind + " " + key,
-          m[key],
-          key === "text",
+    for (const d of pending) {
+      const row = element("article", null, "draft"),
+        label = element("label"),
+        check = element("input"),
+        m = d.content.memory;
+      check.type = "checkbox";
+      check.disabled = !writable;
+      check.onchange = () => {
+        if (check.checked) selected.set(d.id, d);
+        else selected.delete(d.id);
+        controls();
+      };
+      label.append(check, element("strong", short(m.text, 125)));
+      const detail = element("details");
+      detail.append(
+        element("summary", "Preview"),
+        element("p", m.text),
+        facts([["Source", m.source], ["Destination", d.origin.scope], [
+          "Producer",
+          d.content.producer,
+        ]]),
+      );
+      const ev = d.content.evidence;
+      if (ev) {
+        detail.append(
+          element("h3", "Supporting observation"),
+          element("p", ev.text),
+          element("small", ev.source),
         );
-        edit.append(wrapper);
-        inputs.push(() => m[key] = input.value);
       }
+      for (
+        const [name, items] of [["Open questions", d.content.open_questions], [
+          "Next steps",
+          d.content.next_steps,
+        ]]
+      ) {
+        if (items?.length) {
+          const list = element("ul");
+          for (const item of items) list.append(element("li", item));
+          detail.append(element("h3", name), list);
+        }
+      }
+      if (writable && d.status === "draft") {
+        const edit = element("details"),
+          form = element("form", null, "draft-form");
+        edit.append(element("summary", "Edit draft"), form);
+        const content = structuredClone(d.content);
+        for (
+          const [name, mem] of [["Memory", content.memory], [
+            "Evidence",
+            content.evidence,
+          ]]
+        ) {
+          if (!mem) continue;
+          for (const key of ["text", "source", "type"]) {
+            const field = element("label", name + " " + key),
+              input = element(key === "text" ? "textarea" : "input");
+            input.value = mem[key];
+            input.oninput = () => {
+              mem[key] = input.value;
+            };
+            field.append(input);
+            form.append(field);
+          }
+        }
+        const apply = element("button", "Apply edits");
+        form.append(apply);
+        form.onsubmit = async (e) => {
+          e.preventDefault();
+          if (busy) return;
+          busy = true;
+          controls();
+          apply.disabled = true;
+          try {
+            await api("edit", { id: d.id, revision: d.revision, content });
+            await refresh();
+          } catch (err) {
+            message.textContent = err.message;
+          } finally {
+            busy = false;
+            controls();
+            apply.disabled = false;
+          }
+        };
+        detail.append(edit);
+      }
+      row.append(
+        label,
+        element("small", m.type + " · " + d.status + " · " + m.source),
+        detail,
+      );
+      rows.append(row);
     }
-    edit.append(action("Apply edits", async () => {
-      for (const read of inputs) read();
-      await api("edit", { id: d.id, revision: d.revision, content });
-      await loadReview();
-    }));
-    section.append(edit);
+    const closed = ds.filter((d) => ["saved", "dismissed"].includes(d.status));
+    if (closed.length) {
+      const history = element("details");
+      history.append(
+        element("summary", "Reviewed handoffs · " + closed.length),
+      );
+      for (const d of closed) {
+        history.append(
+          element("p", d.status + " · " + d.content.memory.text),
+          element("small", d.content.memory.source),
+        );
+      }
+      rows.append(history);
+    }
+    controls();
   }
-  return section;
-}
-function buttons() {
-  el("save-selected").disabled = busy || !selected.size;
-  el("dismiss-selected").disabled = busy || !selected.size ||
-    drafts.some((d) => selected.has(d.id) && d.status !== "draft");
-}
-export async function loadReview() {
-  const ds = await api("drafts", {});
-  drafts = ds;
-  for (const id of selected) {
-    if (
-      !ds.some((d) => d.id === id && !["saved", "dismissed"].includes(d.status))
-    ) selected.delete(id);
+  async function refresh() {
+    const result = await api("drafts", {});
+    draw(result.drafts || result);
   }
-  el("drafts").replaceChildren(...ds.map(draftView));
-  buttons();
-  if (!ds.length) {
-    el("review-message").textContent = "No drafts in this session.";
-  } else if (
-    el("review-message").textContent === "No drafts in this session."
-  ) el("review-message").textContent = "";
-}
-async function apply(actionName) {
-  if (busy) return;
-  busy = true;
-  buttons();
-  const outcomes = [];
-  for (const d of drafts.filter((d) => selected.has(d.id))) {
+  async function submit(op) {
+    if (busy || !selected.size) return;
+    const approved = [...selected.values()];
+    busy = true;
+    controls();
+    rows.inert = true;
+    const outcomes = [];
     try {
-      const item = await api(actionName, { id: d.id, revision: d.revision });
-      selected.delete(d.id);
-      outcomes.push(states[item.status] + " · " + d.content.memory.text);
-    } catch (error) {
-      outcomes.push(d.content.memory.text + " · " + error.message);
+      for (const d of approved) {
+        try {
+          const r = await api(op, { id: d.id, revision: d.revision });
+          outcomes.push(r.status + " · " + short(d.content.memory.text, 70));
+        } catch (e) {
+          outcomes.push("Failed · " + e.message);
+        }
+      }
+      await refresh();
+      message.textContent = outcomes.join(" / ");
+    } catch (e) {
+      message.textContent = [...outcomes, e.message].join(" / ");
+    } finally {
+      busy = false;
+      rows.inert = false;
+      controls();
     }
   }
-  busy = false;
-  el("review-message").textContent = outcomes.join(" / ");
-  await loadReview();
+  save.onclick = () => submit("save");
+  dismiss.onclick = () => submit("dismiss");
+  draw(initial);
+  if (!writable) {
+    message.textContent =
+      "Read-only session. Open bigbrain ui --session SESSION to edit or approve drafts.";
+  }
 }
-el("save-selected").onclick = () =>
-  apply("save").catch((e) => el("review-message").textContent = e.message);
-el("dismiss-selected").onclick = () =>
-  apply("dismiss").catch((e) => el("review-message").textContent = e.message);

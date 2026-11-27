@@ -174,24 +174,29 @@ func (v *viewer) api(ctx context.Context, r *http.Request) (any, error) {
 			}
 			return ds, err
 		}
-		var req struct {
-			ID       string       `json:"id"`
-			Revision int          `json:"revision"`
-			Content  draftContent `json:"content"`
-		}
+		var req draftAction
 		if err := decodeBody(r, &req); err != nil {
 			return nil, err
 		}
-		if r.URL.Path == "/api/save" {
-			return saveHandoff(ctx, b, v.dir, req.ID, req.Revision, true)
+		return v.applyDraft(ctx, strings.TrimPrefix(r.URL.Path, "/api/"), req)
+	case "/api/browse":
+		var q protocol.BrowseRequest
+		if err := decodeBody(r, &q); err != nil {
+			return nil, err
 		}
-		return changeDraft(ctx, path, b, strings.TrimPrefix(r.URL.Path, "/api/"), req.ID, req.Revision, req.Content)
+		return v.browse(ctx, q)
 	case "/api/query":
 		var q protocol.QueryRequest
 		if err := decodeBody(r, &q); err != nil {
 			return nil, err
 		}
 		return v.query(ctx, q)
+	case "/api/feedback":
+		var q protocol.FeedbackHistoryRequest
+		if err := decodeBody(r, &q); err != nil {
+			return nil, err
+		}
+		return v.feedbackHistory(ctx, q)
 	case "/api/history":
 		var q protocol.HistoryRequest
 		if err := decodeBody(r, &q); err != nil {
@@ -215,21 +220,43 @@ func (v *viewer) checkBinding(ctx context.Context) error {
 }
 
 func (v *viewer) query(ctx context.Context, q protocol.QueryRequest) (protocol.QueryResult, error) {
-	if q.Scope != v.binding.Scope && q.Scope != "global" {
-		return protocol.QueryResult{}, invalid("Scope outside this viewer.")
-	}
-	if err := q.Validate(); err != nil {
-		return protocol.QueryResult{}, err
-	}
-	return callDaemon[protocol.QueryResult](ctx, v.binding.Database, "query", q)
+	return readVisible[protocol.QueryResult](ctx, v, q.Scope, "query", q)
 }
 
 func (v *viewer) history(ctx context.Context, q protocol.HistoryRequest) (protocol.HistoryResult, error) {
-	if q.Scope != v.binding.Scope && q.Scope != "global" {
-		return protocol.HistoryResult{}, invalid("Scope outside this viewer.")
+	return readVisible[protocol.HistoryResult](ctx, v, q.Scope, "history", q)
+}
+
+func (v *viewer) browse(ctx context.Context, q protocol.BrowseRequest) (protocol.BrowseResult, error) {
+	return readVisible[protocol.BrowseResult](ctx, v, q.Scope, "browse", q)
+}
+
+type draftAction struct {
+	ID       string       `json:"id"`
+	Revision int          `json:"revision"`
+	Content  draftContent `json:"content,omitempty"`
+}
+
+func (v *viewer) applyDraft(ctx context.Context, op string, req draftAction) (handoffDraft, error) {
+	b := v.binding
+	if op == "save" {
+		return saveHandoff(ctx, b, v.dir, req.ID, req.Revision, true)
 	}
-	if err := q.Validate(); err != nil {
-		return protocol.HistoryResult{}, err
+	return changeDraft(ctx, b.sessionFile(v.dir, "drafts"), b, op, req.ID, req.Revision, req.Content)
+}
+
+func (v *viewer) feedbackHistory(ctx context.Context, q protocol.FeedbackHistoryRequest) (protocol.FeedbackHistoryResult, error) {
+	return readVisible[protocol.FeedbackHistoryResult](ctx, v, q.Scope, "feedback-history", q)
+}
+
+// Both transports must validate the same binding before contacting the daemon.
+func readVisible[R any](ctx context.Context, v *viewer, scope, operation string, request interface{ Validate() error }) (R, error) {
+	var zero R
+	if scope != v.binding.Scope && scope != "global" {
+		return zero, invalid("Scope outside this viewer.")
 	}
-	return callDaemon[protocol.HistoryResult](ctx, v.binding.Database, "history", q)
+	if err := request.Validate(); err != nil {
+		return zero, err
+	}
+	return callDaemon[R](ctx, v.binding.Database, operation, request)
 }

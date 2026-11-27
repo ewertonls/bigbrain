@@ -1,6 +1,6 @@
 const token = location.hash.slice(1);
 history.replaceState(null, "", location.pathname);
-export async function api(operation, input) {
+async function api(operation, input) {
   const options = { headers: { Authorization: "Bearer " + token } };
   if (input !== undefined) {
     options.method = "POST";

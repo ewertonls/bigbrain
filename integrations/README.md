@@ -58,7 +58,7 @@ Open `"$executable" ui --session SESSION_ID` using the printed URL in a local
 browser. Within Codex the CLI defaults to `CODEX_THREAD_ID` when set. The URL
 contains a per-launch secret. Search, review and automation run entirely on
 loopback; no Node runtime or MCP companion is required. End the foreground
-viewer with Ctrl-C. The optional [desktop Explorer panel](#open-explorer-beside-a-desktop-conversation) uses a separate read-only MCP registration.
+viewer with Ctrl-C. The optional [desktop Explorer panel](#open-explorer-beside-a-desktop-conversation) uses a separate MCP registration, read-only by default.
 
 To update, finish outstanding work, shut down the old daemon with the old
 binary and its original DB selection, then replace the entire native package.
@@ -75,7 +75,7 @@ binary, canonical database, pending drafts and frozen retry manifests.
 
 ### Open Explorer beside a desktop conversation
 
-The optional read-only MCP server serves the same Explorer as the local browser.
+The optional MCP server serves the project workspace beside a conversation and compact cards inside the chat. It starts read-only.
 Build the native package with `make package-macos-arm64`. From the initialized
 BigBrain project, register an absolute executable and workspace:
 
@@ -87,7 +87,35 @@ For a separate database, insert `--db /absolute/path/to/db` before `mcp`.
 The registration pins the workspace even when the desktop client launches MCP
 from a cache directory. The project name is visible in the scope selector.
 
-Open the conversation's panel picker and select **BigBrain Explorer**. Search
-for a decision, select the result and inspect **Source**. **View history**
-shows its visible relationships. To disable just the panel, run
-`codex mcp remove bigbrain-explorer`. [Conversation panel entrypoints](https://developers.openai.com/plugins/build/extensions)
+In Codex Desktop, open the side panel for the conversation, open its tab menu
+and select **BigBrain Explorer**. The **Overview** opens on recent memories.
+Select a row for its source, or **Explore graph** to follow a stored link.
+**Memories** also supports manual search. Its retrieval explanation shows the
+actual traversal and retains the recorded direction. **Activity** shows up to
+20 recent active records. When a session is pinned and global inclusion is
+enabled it also shows the latest emitted receipt and observed hook timestamps.
+Counts with a trailing `+` are lower bounds from a bounded page.
+
+### Conversation cards
+
+Ask Codex to “show a BigBrain context preview for Unix sockets” to invoke
+`recall_card` with a search term. A preview uses the existing context budget
+without updating the receipt. To inspect a real receipt or staged drafts, pin
+a session by adding `--explorer-session SESSION_ID` after the workspace path
+in the registration. Use the same database, workspace, helper state directory
+and session as the CLI. This registration remains pinned even if you change
+chats. Use a separate registration or restart with the new session when needed.
+
+- Ask “show the latest BigBrain recall receipt” to invoke `recall_card`
+  without search text. It shows only emitted IDs, the exact UTF-8 byte count
+  and matching source data. Older receipts can lack a stored retrieval reason.
+- Ask “review the staged BigBrain handoff” to invoke `review_card`. A normal
+  registration previews drafts. To enable **Edit**, **Dismiss selected** and
+  **Save to project** in the card or panel, explicitly add `--explorer-review`
+  alongside the pinned session. Only selected draft revisions go through the
+  existing reviewed-write and retry path. CLI hooks do not open a card.
+- Run `bigbrain ui --session SESSION_ID` for local review and policy controls,
+  or `bigbrain --json context --preview --text "Unix sockets"` for a CLI preview.
+  To remove the desktop registration, run `codex mcp remove bigbrain-explorer`.
+
+[Conversation panel entrypoints](https://developers.openai.com/plugins/build/extensions) · [MCP Apps UI resources and tool results](https://developers.openai.com/plugins/build/chatgpt-ui)

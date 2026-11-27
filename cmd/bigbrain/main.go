@@ -187,7 +187,9 @@ func execute(args []string, options *options) (any, error) {
 		return pluginCommand(options, args)
 	case "mcp":
 		var explorer string
-		flags.Func("explorer-workspace", "serve the read-only Conversation panel for this absolute workspace", func(path string) error {
+		session := flags.String("explorer-session", "", "pin cards to this BigBrain session")
+		review := flags.Bool("explorer-review", false, "enable reviewed draft actions for the pinned session")
+		flags.Func("explorer-workspace", "serve the Conversation panel for this absolute workspace", func(path string) error {
 			if !filepath.IsAbs(path) {
 				return invalid("Use an absolute Explorer workspace.")
 			}
@@ -197,9 +199,12 @@ func execute(args []string, options *options) (any, error) {
 		if err := options.parseFlags(flags, args); err != nil {
 			return parseError(flags, err)
 		}
+		if (*session != "" && explorer == "") || (*review && *session == "") {
+			return nil, invalid("Session review requires an Explorer workspace and explicit session.")
+		}
 		return streamOutput(func(w io.Writer) error {
 			if explorer != "" {
-				return serveExplorer(options.db, explorer, os.Stdin, w)
+				return serveExplorer(options.db, explorer, *session, *review, os.Stdin, w)
 			}
 			return serveMCP(options.db, os.Stdin, w)
 		}), nil
