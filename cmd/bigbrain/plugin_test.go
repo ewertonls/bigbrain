@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"github.com/ewertonls/bigbrain/internal/protocol"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestPluginBindingWorktrees(t *testing.T) {
@@ -45,5 +49,24 @@ func TestPluginBindingWorktrees(t *testing.T) {
 	first.cwd = base
 	if _, err := first.bind(context.Background(), base); err == nil {
 		t.Fatal("accepted a missing binding")
+	}
+}
+
+func TestContextBudgets(t *testing.T) {
+	var matches []protocol.Match
+	for i := range 8 {
+		m := protocol.Match{Memory: protocol.Memory{ID: fmt.Sprint(i), Scope: "project:A", Source: strings.Repeat("線", 500), Text: strings.Repeat("語", 600)}}
+		matches = append(matches, m, m)
+	}
+	p := projectContext(matches, "", nil)
+	if !utf8.ValidString(p.Text) || len(p.Text) > 8192 || len(p.Receipt.Memories) != 4 || p.Receipt.Duplicates == 0 || p.Receipt.BudgetSkipped == 0 || !strings.Contains(p.Text, "…") {
+		t.Fatal(p.Receipt)
+	}
+	for i := range matches {
+		matches[i].Text = "short"
+		matches[i].Source = "source"
+	}
+	if n := len(projectContext(matches, "", nil).Receipt.Memories); n != 5 {
+		t.Fatalf("short records: got %d", n)
 	}
 }

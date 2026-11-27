@@ -36,6 +36,7 @@ Commands:
   invalidate       Hide a memory and preserve its history.
   history          Inspect a memory and its visible relationships.
   delete           Delete a memory and its incident relationships.
+  context          Retrieve bounded, source-linked context.
   plugin doctor    Inspect the Codex binding and local runtime.
   db-path          Print the absolute path to the shared database file.
   project init ID  Save the project ID for this directory or Git repository.
@@ -174,6 +175,8 @@ func execute(args []string, options *options) (any, error) {
 	switch command {
 	case "help":
 		return helpText(flags), nil
+	case "context":
+		return contextCommand(options, args)
 	case "plugin":
 		return pluginCommand(options, args)
 	case "mcp":
