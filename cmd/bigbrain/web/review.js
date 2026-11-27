@@ -5,11 +5,12 @@ function mountReview(api, writable, initial) {
     dismiss = el("dismiss-selected");
   const selected = new Map();
   let busy = false;
-  el("review-actions").hidden = !writable;
+  save.hidden = dismiss.hidden = !writable;
   function controls() {
     save.disabled = busy || !selected.size;
     save.textContent = selected.size
-      ? "Save " + selected.size + " to project"
+      ? "Save " + selected.size +
+        (selected.size === 1 ? " memory" : " memories")
       : "Save selected";
     dismiss.disabled = busy || !selected.size ||
       [...selected.values()].some((d) => d.status !== "draft");
@@ -38,7 +39,7 @@ function mountReview(api, writable, initial) {
         else selected.delete(d.id);
         controls();
       };
-      label.append(check, element("strong", short(m.text, 125)));
+      label.append(check, icon("check"), element("strong", short(m.text, 125)));
       const detail = element("details");
       detail.append(
         element("summary", "Preview"),
@@ -114,7 +115,10 @@ function mountReview(api, writable, initial) {
       }
       row.append(
         label,
-        element("small", m.type + " · " + d.status + " · " + m.source),
+        element(
+          "small",
+          displayType(m.type) + (d.status === "draft" ? "" : " · " + d.status),
+        ),
         detail,
       );
       rows.append(row);
@@ -132,6 +136,11 @@ function mountReview(api, writable, initial) {
         );
       }
       rows.append(history);
+    }
+    if (el("card-summary")) {
+      el("card-summary").textContent = pending.length
+        ? "Pending review"
+        : "Review complete";
     }
     controls();
   }

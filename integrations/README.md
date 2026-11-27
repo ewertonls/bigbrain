@@ -89,9 +89,9 @@ from a cache directory. The project name is visible in the scope selector.
 
 In Codex Desktop, open the side panel for the conversation, open its tab menu
 and select **BigBrain Explorer**. The **Overview** opens on recent memories.
-Select a row for its source, or **Explore graph** to follow a stored link.
+Open the folder selector to change scope or global inclusion. Select a recent memory to see its source, or **Explore graph** to follow a stored link. **Pending review** opens drafts for the pinned session. The gear opens settings.
 **Memories** also supports manual search. Its retrieval explanation shows the
-actual traversal and retains the recorded direction. **Activity** shows up to
+recorded walk, including reverse traversal. The step details preserve the stored direction and source. **Activity** shows up to
 20 recent active records. When a session is pinned and global inclusion is
 enabled it also shows the latest emitted receipt and observed hook timestamps.
 Counts with a trailing `+` are lower bounds from a bounded page.
@@ -111,7 +111,7 @@ chats. Use a separate registration or restart with the new session when needed.
   and matching source data. Older receipts can lack a stored retrieval reason.
 - Ask “review the staged BigBrain handoff” to invoke `review_card`. A normal
   registration previews drafts. To enable **Edit**, **Dismiss selected** and
-  **Save to project** in the card or panel, explicitly add `--explorer-review`
+  the selection-based **Save** button in the card or panel, explicitly add `--explorer-review`
   alongside the pinned session. Only selected draft revisions go through the
   existing reviewed-write and retry path. CLI hooks do not open a card.
 - Run `bigbrain ui --session SESSION_ID` for local review and policy controls,

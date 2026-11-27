@@ -1,3 +1,15 @@
+function icon(name) {
+  const ns = "http://www.w3.org/2000/svg",
+    svg = document.createElementNS(ns, "svg"),
+    use = document.createElementNS(ns, "use");
+  svg.setAttribute("class", "icon");
+  svg.setAttribute("aria-hidden", "true");
+  use.setAttribute("href", "#i-" + name);
+  svg.append(use);
+  return svg;
+}
+const displayType = (value) =>
+  value ? value[0].toUpperCase() + value.slice(1) : "Memory";
 const el = (id) => document.getElementById(id);
 function element(tag, text, cls) {
   const n = document.createElement(tag);
@@ -51,12 +63,15 @@ function memoryRow(m, select) {
     body = element("span", null, "row-copy");
   body.append(
     element("strong", short(m.text, 125)),
-    element("small", [m.type, m.scope, timeLabel(m.recorded_at)].join(" · ")),
+    element(
+      "small",
+      [displayType(m.type), m.scope, timeLabel(m.recorded_at)].join(" · "),
+    ),
   );
   row.append(
     element("span", null, "dot"),
     body,
-    element("span", "›", "chevron"),
+    icon("next"),
   );
   return row;
 }

@@ -12,8 +12,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const explorerURI = "ui://bigbrain/explorer-v2.html"
-const cardURI = "ui://bigbrain/card-v1.html"
+const explorerURI = "ui://bigbrain/explorer-v3.html"
+const cardURI = "ui://bigbrain/card-v2.html"
 const explorerMIME = "text/html;profile=mcp-app"
 
 func serveExplorer(db, workspace, session string, review bool, in io.ReadCloser, out io.Writer) error {
@@ -32,14 +32,17 @@ func serveExplorer(db, workspace, session string, review bool, in io.ReadCloser,
 		}
 	}
 	server := mcp.NewServer(&mcp.Implementation{Name: "bigbrain-explorer", Version: "2.0.0"}, nil)
-	for uri, name := range map[string]string{explorerURI: "panel", cardURI: "card"} {
+	// Existing conversation cards can still carry a previous resource URI.
+	for name, uris := range map[string][]string{"panel": {explorerURI, "ui://bigbrain/explorer-v2.html"}, "card": {cardURI, "ui://bigbrain/card-v1.html"}} {
 		var html strings.Builder
 		if err := viewerPages.ExecuteTemplate(&html, name+".tmpl", nil); err != nil {
 			return err
 		}
-		server.AddResource(&mcp.Resource{URI: uri, Name: "BigBrain " + name, MIMEType: explorerMIME}, func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: uri, MIMEType: explorerMIME, Text: html.String()}}}, nil
-		})
+		for _, uri := range uris {
+			server.AddResource(&mcp.Resource{URI: uri, Name: "BigBrain " + name, MIMEType: explorerMIME}, func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+				return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: uri, MIMEType: explorerMIME, Text: html.String()}}}, nil
+			})
+		}
 	}
 	open := &mcp.Tool{Name: "explorer", Title: "BigBrain Explorer", Description: "Browse the bound project in a conversation side panel.",
 		Meta: mcp.Meta{

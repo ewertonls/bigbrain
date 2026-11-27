@@ -35,4 +35,8 @@ Simple-code review consolidated the Explorer markup, JavaScript, scope checks an
 
 Redesigned the workspace and separated contextual MCP cards from the conversation panel. Verified scoped browse, graph and provenance, receipt budgets, read-only defaults and explicit reviewed writes. See [design QA and screenshots](references/design-qa.md) for the tested surfaces and host limitations.
 
+### 2026-11-27T03:27:35-03:00
+
+Applied the six original ChatGPT design references to the panel, timeline, graph and inline cards. Verified the packaged MCP resources and selected a memory source in the Codex in-app browser. [Canonical references, actual renders and validation scope](references/ui-fidelity.md).
+
 <!-- kadai:log:end -->

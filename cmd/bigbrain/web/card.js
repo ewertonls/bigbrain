@@ -9,34 +9,27 @@ function drawCard({ detail: result }) {
   }
   el("notice").textContent = "";
   if (data.kind === "review") {
-    el("card-title").textContent = "Handoff review";
-    el("card-summary").textContent = data.drafts.length + " pending";
-    page.append(
-      element(
-        "p",
-        "Destination · " + data.scope + " · " + data.session,
-        "card-scope",
-      ),
-      el("review-template").content.cloneNode(true),
+    el("card-title").textContent = "New knowledge";
+    el("card-summary").textContent = "Pending review";
+    page.append(el("review-template").content.cloneNode(true));
+    const destination = element(
+      "small",
+      "Destination: " + data.scope,
+      "destination",
     );
+    destination.title = "Session · " + data.session;
+    el("review-actions").prepend(destination);
     mountReview(panelApi, data.writable, data.drafts);
     return;
   }
   const r = data.receipt;
   el("card-title").textContent = data.preview
     ? "Context preview"
-    : "Recall receipt";
+    : "Context recalled";
   el("card-summary").textContent = r
-    ? r.memories.length + " included · " + r.bytes + " B"
+    ? r.memories.length + (r.memories.length === 1 ? " memory" : " memories") +
+      " · " + r.bytes + " B"
     : "";
-  page.append(
-    element(
-      "p",
-      data.scope + " · " +
-        (data.preview ? "Preview only" : data.session || "No session pinned"),
-      "card-scope",
-    ),
-  );
   if (!r) {
     page.append(
       element(
@@ -50,31 +43,49 @@ function drawCard({ detail: result }) {
   for (const item of data.items || []) {
     const row = element("details", null, "receipt-row"),
       head = element("summary");
+    const text = item.text || item.id;
+    const [first, ...rest] = text.split(/\n+|(?<=[.!?])\s+/);
     head.append(
-      element("span", null, "dot " + tone(item.type)),
-      element("strong", short(item.text || item.id, 100)),
+      icon(
+        item.scope === "global"
+          ? "globe"
+          : item.type === "procedural"
+          ? "repeat"
+          : "branch",
+      ),
     );
-    row.append(
-      head,
+    const body = element("span", null, "receipt-copy");
+    body.append(element("strong", short(first, 110)));
+    const description = rest.join(" ") || item.source;
+    if (description) body.append(element("span", short(description, 135)));
+    body.append(
       element(
         "small",
-        [item.type, item.scope, item.source].filter(Boolean).join(" · "),
+        [displayType(item.type), item.scope].filter(Boolean).join(" · "),
       ),
+    );
+    head.append(body);
+    row.append(
+      head,
       facts([
         ["Why included", item.reason || "Reason unavailable for this receipt"],
         ["Source", item.source],
         ["Memory ID", item.id],
+        ["Excerpt", item.text],
       ]),
     );
     page.append(row);
   }
-  const foot = element("div", null, "receipt-foot");
+  const foot = element("details", null, "receipt-foot");
   foot.append(
-    element(
-      "small",
-      r.bytes + " UTF-8 bytes of " + r.limit + " · " + r.duplicates +
-        " duplicates · " + r.budget_skipped + " skipped for budget",
-    ),
+    element("summary", "Receipt details"),
+    facts([
+      ["Scope", data.scope],
+      ["Session", data.session || "No session pinned"],
+      ["Context size", r.bytes + " UTF-8 bytes of " + r.limit],
+      ["Duplicates", r.duplicates],
+      ["Skipped for budget", r.budget_skipped],
+    ]),
   );
   if (r.fallback) {
     foot.append(

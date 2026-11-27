@@ -1,4 +1,4 @@
-function retrieval(m) {
+function retrieval(m, matches) {
   const reason = m.reason, box = section("Retrieval explanation");
   const steps = reason.steps?.length
     ? reason.steps
@@ -12,7 +12,10 @@ function retrieval(m) {
     relationship: "Relationship traversal",
     id: "Selected by ID",
   };
-  box.append(element("strong", kinds[reason.kind] || reason.kind));
+  box.append(
+    retrievalDiagram(m, steps, matches),
+    element("strong", kinds[reason.kind] || reason.kind),
+  );
   const signals = Object.entries({
     BM25: reason.bm25,
     Cosine: reason.cosine,
@@ -99,7 +102,7 @@ async function mountWorkspace(api, local) {
       );
     }
     page.append(copies);
-    if (m.reason) page.append(retrieval(m));
+    if (m.reason) page.append(retrieval(m, recent));
   }
   function openGraph(id, edge = "") {
     edgeToInspect = edge;
@@ -119,7 +122,8 @@ async function mountWorkspace(api, local) {
     input.setAttribute("aria-label", "Search memories");
     input.placeholder = "Search memories…";
     input.value = value;
-    form.append(input, element("button", "Search"));
+    form.className = "search";
+    form.append(icon("search"), input);
     form.onsubmit = (e) => {
       e.preventDefault();
       term = input.value.trim();
@@ -149,8 +153,22 @@ async function mountWorkspace(api, local) {
         el("scope").options[0].text = status.binding.scope;
         projectGlobal = el("global").checked = status.binding.include_global;
       }
-      el("connection").textContent = "Local · " + status.daemon.state;
+      function daemonStatus(state) {
+        const badge = el("connection");
+        badge.dataset.state = state;
+        badge.textContent = state === "running" ? "Local" : "Local · " + state;
+        badge.title = "Local daemon · " + state;
+      }
+      daemonStatus(status.daemon.state);
       const s = scope(), hasSession = !!status.binding.session_id;
+      el("scope-name").textContent = s.scope === "global"
+        ? "Global"
+        : s.scope.replace(/^project:/, "");
+      el("scope-kind").textContent = s.scope === "global"
+        ? "Global only"
+        : s.include_global
+        ? "Project + global"
+        : "Project";
       const read = (op, data) => api(op, { ...s, ...data });
       const browse = (after = "", limit = 12) =>
         read("browse", { after, limit });
@@ -161,6 +179,9 @@ async function mountWorkspace(api, local) {
             "Daemon",
             status.daemon.state,
           ], ["Session", status.binding.session_id || "No session pinned"]]),
+        );
+        page.append(
+          action("Handoff review", () => move("review"), "text-button"),
         );
         if (!hasSession) {
           page.append(
@@ -283,9 +304,15 @@ async function mountWorkspace(api, local) {
         recent = batch.memories;
         if (view === "activity") {
           page.append(
-            heading("Activity", "Recent records in the selected scope"),
+            heading(
+              "Brain activity",
+              s.scope +
+                (hasSession && s.include_global
+                  ? " · Session " + status.binding.session_id
+                  : ""),
+            ),
           );
-          const timeline = section("Recorded activity"),
+          const timeline = element("section", null, "timeline"),
             events = recent.map((m) => ({
               at: m.recorded_at,
               title: "Memory recorded",
@@ -313,11 +340,24 @@ async function mountWorkspace(api, local) {
           for (const e of events) {
             const item = element("article", null, "event");
             item.append(
-              element("small", timeLabel(e.at)),
+              icon(
+                e.select
+                  ? "brain"
+                  : e.title === "Context emitted"
+                  ? "search"
+                  : "repeat",
+              ),
               element("strong", e.title),
               e.select
                 ? action(short(e.detail, 120), e.select, "text-button")
                 : element("p", e.detail),
+            );
+            item.append(
+              element(
+                "small",
+                timeLabel(e.at) + " · " +
+                  (e.select ? "Memory store" : "Session"),
+              ),
             );
             timeline.append(item);
           }
@@ -328,16 +368,12 @@ async function mountWorkspace(api, local) {
           }
           page.append(timeline);
         } else {
-          page.append(
-            heading(
-              s.scope === "global" ? "Global memory" : "Project memory",
-              "Knowledge accumulated across sessions.",
-            ),
-            searchBox(""),
-          );
           const metrics = element("div", null, "metrics");
-          function metric(name, value) {
-            const cell = element("div");
+          page.append(metrics, searchBox(""));
+          function metric(name, value, run) {
+            const cell = run
+              ? action("", run, "metric-action")
+              : element("div");
             cell.append(element("small", name), element("strong", value));
             metrics.append(cell);
           }
@@ -345,7 +381,7 @@ async function mountWorkspace(api, local) {
             "Active memories",
             recent.length + (batch.next_cursor ? "+" : ""),
           );
-          page.insertBefore(metrics, page.querySelector("form"));
+
           if (recent.length) {
             const histories = await Promise.all(
               recent.slice(0, 3).map((m) =>
@@ -355,7 +391,8 @@ async function mountWorkspace(api, local) {
             if (!current()) return;
             const h = histories.find((h) => h.related.length) || histories[0];
             seed = h.memory.id;
-            metric("Links in preview", h.related.length);
+            const graph = neighborhood(histories);
+            metric("Links in preview", graph.edges.size);
             const preview = section(
               "Knowledge network",
               action(
@@ -366,20 +403,25 @@ async function mountWorkspace(api, local) {
             );
             preview.append(
               network(
-                h,
+                graph,
+                h.memory,
                 (kind, item) =>
-                  kind === "node"
-                    ? openGraph(item.id)
-                    : openGraph(h.memory.id, item.relationship_id),
+                  kind === "node" ? openGraph(item.id) : openGraph(
+                    histories.find((h) =>
+                      h.related.some((r) =>
+                        r.path.relationship_id === item.relationship_id
+                      )
+                    ).memory.id,
+                    item.relationship_id,
+                  ),
                 true,
               ),
-              element(
-                "small",
-                h.related.length
-                  ? h.related.length + " stored relationships shown"
-                  : "No stored links for this memory.",
-              ),
             );
+            if (!graph.edges.size) {
+              preview.append(
+                element("small", "No visible links in this sample."),
+              );
+            }
             page.append(preview);
           }
           const list = section(
@@ -400,11 +442,8 @@ async function mountWorkspace(api, local) {
             const count = (ds.drafts || ds).filter((d) =>
               !["dismissed", "saved"].includes(d.status)
             ).length;
-            metric("Pending review", count);
-            if (count) {
-              page.append(action(count + " pending · Review handoff", () =>
-                move("review"), "review-link"));
-            }
+            metric("Pending review", count, () =>
+              move("review"));
           }
         }
       }
@@ -412,11 +451,13 @@ async function mountWorkspace(api, local) {
         notice.textContent = "";
         if (["overview", "graph", "activity", "memories"].includes(view)) {
           status.daemon.state = "running";
-          el("connection").textContent = "Local · running";
+          daemonStatus("running");
         }
       }
     } catch (e) {
       if (current()) {
+        el("connection").removeAttribute("data-state");
+        el("connection").textContent = "Local";
         page.replaceChildren();
         notice.replaceChildren(
           element("p", e.message),
@@ -525,7 +566,7 @@ async function mountWorkspace(api, local) {
       }
     }
     function draw(batch) {
-      const diagram = network(batch, inspect);
+      const diagram = network(neighborhood([batch]), batch.memory, inspect);
       const controls = graphControls(diagram);
       const toggle = action("List view", () => {
         const hidden = diagram.toggleAttribute("hidden");
@@ -579,6 +620,7 @@ async function mountWorkspace(api, local) {
     b.onclick = () => move(b.dataset.page);
   }
   function resetScope() {
+    el("scope-menu").open = false;
     term = "";
     seed = "";
     back = [];

@@ -31,7 +31,7 @@ window.addEventListener("message", ({ source, origin, data }) => {
     return;
   }
   if (data.method === "ui/notifications/host-context-changed") {
-    applyTheme(data.params?.theme);
+    applyHostStyle(data.params);
     return;
   }
   if (data.method === "ui/resource-teardown") {
@@ -47,7 +47,26 @@ window.addEventListener("message", ({ source, origin, data }) => {
   else call.resolve(data.result);
 });
 
-function applyTheme(theme) {
+function applyHostStyle(context) {
+  const theme = context?.theme;
+  const variables = context?.styles?.variables;
+  if (variables) {
+    for (
+      const key of [
+        "--font-sans",
+        "--color-background-primary",
+        "--color-background-secondary",
+        "--color-text-primary",
+        "--color-text-secondary",
+        "--color-text-success",
+        "--color-border-secondary",
+      ]
+    ) {
+      if (typeof variables[key] === "string") {
+        document.documentElement.style.setProperty(key, variables[key]);
+      } else document.documentElement.style.removeProperty(key);
+    }
+  }
   if (theme === "light" || theme === "dark") {
     document.documentElement.dataset.theme = theme;
   }
@@ -58,7 +77,7 @@ async function connectHost() {
     appCapabilities: {},
     protocolVersion: "2026-01-26",
   });
-  applyTheme(result?.hostContext?.theme);
+  applyHostStyle(result?.hostContext);
   send({ method: "ui/notifications/initialized" });
 }
 async function panelApi(operation, args = {}) {

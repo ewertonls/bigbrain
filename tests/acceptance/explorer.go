@@ -51,7 +51,12 @@ func verifyExplorerPanel(c cli) {
 	}
 	resource, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: uri})
 	check(err)
-	require(len(resource.Contents) == 1 && resource.Contents[0].MIMEType == "text/html;profile=mcp-app" && strings.Contains(resource.Contents[0].Text, "Project memory"), "missing bundled Explorer")
+	require(len(resource.Contents) == 1 && resource.Contents[0].MIMEType == "text/html;profile=mcp-app" && strings.Contains(resource.Contents[0].Text, "Knowledge network"), "missing bundled Explorer")
+	for _, previous := range []string{"ui://bigbrain/explorer-v2.html", "ui://bigbrain/card-v1.html"} {
+		resource, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: previous})
+		check(err)
+		require(len(resource.Contents) == 1 && resource.Contents[0].URI == previous, "old conversation resource unavailable")
+	}
 	call := func(name string, input any) *mcp.CallToolResult {
 		r, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: input})
 		check(err)
