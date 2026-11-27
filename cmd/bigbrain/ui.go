@@ -145,6 +145,30 @@ func (v *viewer) api(ctx context.Context, r *http.Request) (any, error) {
 		return nil, invalid("Workspace binding changed. Reopen the viewer.")
 	}
 	switch r.URL.Path {
+	case "/api/drafts", "/api/edit", "/api/save", "/api/dismiss":
+		if b.Session == "" {
+			return nil, invalid("Reopen with --session SESSION to review handoffs.")
+		}
+		path := b.sessionFile(v.dir, "drafts")
+		if r.URL.Path == "/api/drafts" {
+			ds, err := readState[drafts](path)
+			if ds == nil {
+				ds = drafts{}
+			}
+			return ds, err
+		}
+		var req struct {
+			ID       string       `json:"id"`
+			Revision int          `json:"revision"`
+			Content  draftContent `json:"content"`
+		}
+		if err := decodeBody(r, &req); err != nil {
+			return nil, err
+		}
+		if r.URL.Path == "/api/save" {
+			return saveHandoff(ctx, b, v.dir, req.ID, req.Revision, true)
+		}
+		return changeDraft(ctx, path, b, strings.TrimPrefix(r.URL.Path, "/api/"), req.ID, req.Revision, req.Content)
 	case "/api/query":
 		var q protocol.QueryRequest
 		if err := decodeBody(r, &q); err != nil {
