@@ -36,6 +36,7 @@ Commands:
   invalidate       Hide a memory and preserve its history.
   history          Inspect a memory and its visible relationships.
   delete           Delete a memory and its incident relationships.
+  handoff           Stage and review session drafts.
   context          Retrieve bounded, source-linked context.
   plugin doctor    Inspect the Codex binding and local runtime.
   db-path          Print the absolute path to the shared database file.
@@ -175,6 +176,8 @@ func execute(args []string, options *options) (any, error) {
 	switch command {
 	case "help":
 		return helpText(flags), nil
+	case "handoff":
+		return handoffCommand(options, args)
 	case "context":
 		return contextCommand(options, args)
 	case "plugin":
