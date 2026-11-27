@@ -2,7 +2,7 @@
 kadai: task
 id: "BB-0041"
 title: "Restore context at startup, resume and compaction"
-status: "todo"
+status: "done"
 parent: BB-0034
 depends_on: [BB-0039, BB-0040]
 ---
@@ -14,3 +14,13 @@ Wire the bounded context projection to the verified `SessionStart` events. Resol
 - Within an epoch, deduplicate by database, scope/global selection, memory ID and content hash, partitioned by worktree/session/agent. Changed content may be emitted again. Exercise duplicate concurrent invocations and two later compactions so neither is permanently suppressed.
 - The handler completes or skips within two seconds under a three-second host timeout, including project discovery. Missing runtime, slow/stopped daemon or malformed input leaves the session usable with valid non-blocking output. Disabled prompt recall makes zero daemon queries.
 - Use atomic local state updates and a short scoped lock outside daemon waits. A failure to deliver context can be retried without suppressing all subsequent recall.
+
+<!-- kadai:log:start -->
+
+## Log
+
+### 2026-11-27T02:07:08-03:00
+
+Tested startup, resume, two distinct compact epochs, concurrent duplicate deliveries, unsupported events, malformed input, missing runtime and a stopped daemon using the actual CLI. Simple-code review reused confirmed session IDs at resume and coalesced duplicate startup deliveries. The shell wrapper only translates loader failure to host JSON.
+
+<!-- kadai:log:end -->

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"flag"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -114,6 +115,9 @@ func (p pluginOptions) stateDir() (string, error) {
 	return dir, nil
 }
 func pluginCommand(o *options, args []string) (any, error) {
+	if len(args) == 1 && args[0] == "hook" {
+		return streamOutput(func(w io.Writer) error { return runPluginHook(o.db, os.Stdin, w) }), nil
+	}
 	if len(args) == 0 || args[0] != "doctor" {
 		return nil, invalid("Run bigbrain plugin doctor.")
 	}

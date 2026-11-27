@@ -37,7 +37,10 @@ type recallInput struct {
 	Bootstrap bool
 }
 type recallState struct {
-	Last *recallReceipt `json:"last,omitempty"`
+	Source        string         `json:"source,omitempty"`
+	EpochStart    time.Time      `json:"epoch_start,omitempty"`
+	IncludeGlobal bool           `json:"include_global"`
+	Last          *recallReceipt `json:"last,omitempty"`
 }
 type latestHandoff struct {
 	IDs       []string  `json:"ids"`

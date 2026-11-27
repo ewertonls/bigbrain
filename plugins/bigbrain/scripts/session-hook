@@ -1,0 +1,4 @@
+#!/bin/sh
+# Publish a single complete host response, including when the loader fails.
+response=$("$(dirname "$0")/bigbrain" plugin hook) || response='{}'
+printf '%s\n' "$response"
