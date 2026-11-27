@@ -1,0 +1,8 @@
+{
+  "name": "bigbrain",
+  "version": "0.2.0",
+  "description": "Recall local project memory and review evidence with BigBrain.",
+  "author": {
+    "name": "ewertonls"
+  }
+}

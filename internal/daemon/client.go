@@ -31,7 +31,24 @@ type Client struct {
 	status protocol.StatusResult
 }
 
+type connectOnlyKey struct{}
+
+// ConnectOnly prevents a supervised viewer from starting a shared daemon that
+// its host would terminate along with the viewer's process tree.
+func ConnectOnly(ctx context.Context) context.Context {
+	return context.WithValue(ctx, connectOnlyKey{}, true)
+}
+
 func Connect(ctx context.Context, dbDir string, autoStart bool) (*Client, error) {
+	connectOnly := ctx.Value(connectOnlyKey{}) == true
+	client, err := connect(ctx, dbDir, autoStart && !connectOnly)
+	if autoStart && connectOnly && err == nil && client == nil {
+		return nil, protocol.NewError("DAEMON_UNAVAILABLE", "The daemon stopped. Reopen the Explorer.")
+	}
+	return client, err
+}
+
+func connect(ctx context.Context, dbDir string, autoStart bool) (*Client, error) {
 	t, err := databaseTarget(dbDir, autoStart)
 	if err != nil {
 		if !autoStart && errors.Is(err, os.ErrNotExist) {

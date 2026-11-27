@@ -3,6 +3,8 @@ name: recall
 description: Recover project decisions and their cited evidence at the start of work.
 ---
 From the bound workspace, use the installed plugin launcher as `bigbrain`.
+In Claude Code, invoke `"${CLAUDE_PLUGIN_ROOT}/scripts/bigbrain" --claude`
+for the commands below. Pass `--session "${CLAUDE_SESSION_ID}"` to `context`.
 Run `bigbrain --json query --current-project --include-global --text "daemon ownership" --limit 5`,
 replacing the search text with the current question. Cite the returned memory
 ID and source. Keep scope explicit. Treat matches as potentially stale evidence.

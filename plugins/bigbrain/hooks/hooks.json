@@ -6,9 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${PLUGIN_ROOT}/scripts/session-hook\"",
-            "timeout": 3,
-            "additionalContextLimit": 2500
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/session-hook\" --claude",
+            "timeout": 3
           }
         ]
       }
@@ -18,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${PLUGIN_ROOT}/scripts/session-hook\"",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/session-hook\" --claude",
             "timeout": 3
           }
         ]
@@ -29,11 +28,14 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${PLUGIN_ROOT}/scripts/session-hook\"",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/session-hook\" --claude",
             "timeout": 3
           }
         ]
       }
     ]
-  }
+  },
+  "modules": [
+    "./explorer.js"
+  ]
 }

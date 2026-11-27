@@ -1,0 +1,13 @@
+{
+  "name": "bigbrain-local",
+  "metadata": { "description": "Local BigBrain project memory for Claude Code." },
+  "owner": {
+    "name": "ewertonls"
+  },
+  "plugins": [
+    {
+      "name": "bigbrain",
+      "source": "./plugins/bigbrain"
+    }
+  ]
+}

@@ -5,6 +5,10 @@ description: Save requested project or global memories, prepare source-linked ha
 
 ## Explicit requests to remember
 
+In Claude Code, use `"${CLAUDE_PLUGIN_ROOT}/scripts/bigbrain" --claude` as
+`bigbrain` below. Pass `--session "${CLAUDE_SESSION_ID}"` to every handoff
+operation, including listing drafts.
+
 Save a memory the user asks to remember in the current project by default. When
 they explicitly ask to remember it across projects (for example, “guarda isso
 para todos os projetos”), write it directly to the global scope. The request

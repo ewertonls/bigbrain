@@ -490,3 +490,5 @@ costs. [Memory evaluation](docs/MEMORY-EVALUATION.md) · [Foundation evaluation]
 
 For the local Codex marketplace package, session hooks, reviewed handoffs and
 browser viewer, follow the [Codex installation guide](integrations/README.md#install-the-local-codex-plugin).
+
+For Claude Code, install [the local plugin and native Explorer](integrations/README.md#install-the-local-claude-code-plugin).

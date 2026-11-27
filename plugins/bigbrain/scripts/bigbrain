@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 data=${PLUGIN_DATA:-${CLAUDE_PLUGIN_DATA:-}}
+# The mod, shell hooks and skills run in different host environments. Give
+# all three Claude entry points the same persistent configuration directory.
+if [ "${1:-}" = "--claude" ]; then
+    shift
+    data=${XDG_CONFIG_HOME:-"$HOME/.config"}/bigbrain/claude
+fi
 if [ -n "$data" ] && [ -f "$data/state.path" ]; then
     IFS= read -r BIGBRAIN_CODEX_STATE < "$data/state.path" || exit 1
     export BIGBRAIN_CODEX_STATE

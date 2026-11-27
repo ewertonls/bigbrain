@@ -121,3 +121,57 @@ chats. Use a separate registration or restart with the new session when needed.
   To remove the desktop registration, run `codex mcp remove bigbrain-explorer`.
 
 [Conversation panel entrypoints](https://developers.openai.com/plugins/build/extensions) · [MCP Apps UI resources and tool results](https://developers.openai.com/plugins/build/chatgpt-ui)
+
+## Install the local Claude Code plugin
+
+From the BigBrain checkout, build the native executable and install the plugin
+from the local marketplace. On macOS ARM64, keep the package's adjacent
+`bin` and `lib` directories together:
+
+```sh
+make package-macos-arm64
+executable="$PWD/dist/macos-arm64/bin/bigbrain"
+"$executable" --help
+config="${XDG_CONFIG_HOME:-$HOME/.config}/bigbrain/claude"
+(umask 077 && mkdir -p "$config" && printf '%s\n' "$executable" > "$config/executable.path")
+claude plugin install bigbrain --marketplace . --scope user
+claude plugin details bigbrain@bigbrain-local
+```
+
+Start a fresh `claude` session in the target workspace. Run
+`/bigbrain:setup` to check the binding. For a new workspace, choose the project
+ID and run `bigbrain project init PROJECT_ID`. The package supplies
+`/bigbrain:recall`, `/bigbrain:checkpoint` and `/bigbrain:explore`.
+The three lifecycle hooks use the same executable as the skills. Automatic
+recall uses a running daemon and the existing BigBrain session policy.
+Codex and Claude can share the same database and project. Drafts, policy and
+recall receipts belong to their originating session.
+
+Open `/bigbrain-explorer` for the bound workspace. **Overview** shows recent
+memories and a sample of their stored links. Use the folder selector to switch
+between project, project plus global, and global. **Memories** includes search,
+sources and retrieval paths. **Graph** lets you inspect a node or relationship,
+follow its neighbors and view recorded feedback. The desktop draws the network
+as a diagram and the terminal shows its directed links as text.
+**Activity** lists recent records and, in project plus global, the session's
+recall and hook events. Open **Settings** for recall policy, context previews
+and handoff review.
+Use Tab or the arrow keys to focus a control, Enter to activate it and Esc to
+close the pane. The mod starts a local viewer for the current project and
+session while the pane is open. Closing it leaves the shared database daemon
+running. The Explorer needs a native build supporting `plugin doctor --start-daemon`
+and `ui --connect-only`. The browser viewer is also available through
+`bigbrain ui --session SESSION_ID`.
+
+The Claude launcher reads the executable pointer above, falling back to the
+shared pointer in `${XDG_STATE_HOME:-$HOME/.local/state}/bigbrain/codex` or
+`BIGBRAIN_CODEX_STATE`. An absolute path in `$config/state.path` selects a
+different private helper state directory for all three Claude entry points.
+
+For development, load the package for one session with
+`claude --plugin-dir ./plugins/bigbrain`. Check changes with
+`claude plugin validate ./plugins/bigbrain` and `claude plugin test ./plugins/bigbrain`.
+For an installation from the local checkout, keep the checkout in place.
+After updating it, start a new session or run `/reload-plugins`;
+use `claude plugin update bigbrain@bigbrain-local` for a versioned update.
+Remove the user installation with `claude plugin uninstall bigbrain@bigbrain-local --scope user`.

@@ -39,7 +39,7 @@ Commands:
   delete           Delete a memory and its incident relationships.
   handoff           Stage and review session drafts.
   context          Retrieve bounded, source-linked context.
-  plugin doctor    Inspect the Codex binding and local runtime.
+  plugin doctor    Inspect the workspace binding and local runtime.
   db-path          Print the absolute path to the shared database file.
   project init ID  Save the project ID for this directory or Git repository.
   status           Show the daemon state.

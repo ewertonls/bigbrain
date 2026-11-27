@@ -146,6 +146,7 @@ func pluginCommand(o *options, args []string) (any, error) {
 	}
 	f := newFlags("plugin doctor")
 	o.register(f)
+	startDaemon := f.Bool("start-daemon", false, "start the bound project's daemon if needed")
 	var p pluginOptions
 	p.register(f)
 	if err := o.parseFlags(f, args[1:]); err != nil {
@@ -161,7 +162,7 @@ func pluginCommand(o *options, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	client, err := daemon.Connect(ctx, b.Database, false)
+	client, err := daemon.Connect(ctx, b.Database, *startDaemon)
 	if err != nil {
 		return nil, err
 	}

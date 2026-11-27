@@ -5,7 +5,16 @@ description: Configure the native BigBrain executable for local project memory.
 Verify the user's installed binary by absolute path with `"$executable" --help`.
 For a macOS ARM64 distribution, keep the adjacent bin and lib directories.
 
-Use the private shared state directory from `BIGBRAIN_CODEX_STATE`, otherwise
+In Claude Code, verify `"$executable" ui --help` lists `--connect-only`
+(Go flag help may show `-connect-only`). Use the executable from the same
+checkout as the plugin. Store the verified absolute path in
+`${XDG_CONFIG_HOME:-$HOME/.config}/bigbrain/claude/executable.path` (0700
+directory, 0600 file). Run `"${CLAUDE_PLUGIN_ROOT}/scripts/bigbrain" --claude
+--json plugin doctor --session "${CLAUDE_SESSION_ID}"` from the workspace.
+This configuration is shared by the Claude skills, command hooks and native
+Explorer. The launcher also accepts the shared executable pointer below.
+
+In Codex, use the private shared state directory from `BIGBRAIN_CODEX_STATE`, otherwise
 `${XDG_STATE_HOME:-$HOME/.local/state}/bigbrain/codex`. Create it with mode
 0700 and write the verified absolute binary path plus a newline to
 `executable.path` with mode 0600. A plugin-specific `PLUGIN_DATA/executable.path`

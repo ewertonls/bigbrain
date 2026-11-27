@@ -16,6 +16,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/ewertonls/bigbrain/internal/daemon"
 	"github.com/ewertonls/bigbrain/internal/protocol"
 )
 
@@ -41,6 +42,7 @@ type viewer struct {
 func uiCommand(o *options, args []string) (any, error) {
 	f := newFlags("ui")
 	o.register(f)
+	connectOnly := f.Bool("connect-only", false, "use a running daemon without starting one")
 	var p pluginOptions
 	p.register(f)
 	if err := o.parseFlags(f, args); err != nil {
@@ -70,6 +72,9 @@ func uiCommand(o *options, args []string) (any, error) {
 			return err
 		}
 		srv := http.Server{Handler: &v, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 35 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192}
+		if *connectOnly {
+			srv.BaseContext = func(net.Listener) context.Context { return daemon.ConnectOnly(context.Background()) }
+		}
 		return srv.Serve(listener)
 	}), nil
 }
