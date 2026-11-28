@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -163,14 +162,7 @@ func runMemoryEvaluation(c cli, fixturePath string) {
 	firstHybrid := time.Since(start).Microseconds()
 	require(warm.Fallback == "", "configured model fell back: %s", warm.Fallback)
 
-	rss := func() int {
-		data, err := exec.Command("ps", "-o", "rss=", "-p", strconv.Itoa(status(c).PID)).Output()
-		check(err)
-		kib, err := strconv.Atoi(strings.TrimSpace(string(data)))
-		check(err)
-		return kib
-	}
-	freshRSS := rss()
+	freshRSS := daemonRSSKiB(status(c).PID)
 	const repetitions = 5
 	original := make(map[evaluationQuery]protocol.QueryResult)
 	scores := make(map[string]modeScore)
@@ -235,7 +227,7 @@ func runMemoryEvaluation(c cli, fixturePath string) {
 	reopened := f.query(c, evaluationQuery{f.Questions[0].Search, "hybrid", true})
 	restartUS := time.Since(start).Microseconds()
 	require(reflect.DeepEqual(reopened, warm), "populated cache changed first query")
-	restartRSS := rss()
+	restartRSS := daemonRSSKiB(status(c).PID)
 	warmP95 := func() int64 {
 		var samples []int64
 		for _, q := range f.Questions {
@@ -254,7 +246,7 @@ func runMemoryEvaluation(c cli, fixturePath string) {
 	afterWrite := f.query(c, evaluationQuery{f.Questions[0].Search, "hybrid", true})
 	afterWriteUS := time.Since(start).Microseconds()
 	require(afterWrite.Fallback == "", "post-write query fell back")
-	afterWriteRSS := rss()
+	afterWriteRSS := daemonRSSKiB(status(c).PID)
 	afterWriteP95 := warmP95()
 	// Remove the timing sample before comparing with the original controls.
 	write(c, "delete", "--key", "remove-timing-write", "--id", written.ID, "--project", f.Project)

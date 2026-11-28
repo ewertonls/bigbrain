@@ -132,9 +132,10 @@ daemon. The restart query starts it again with populated vectors on disk.
 The single-write query runs on a warm daemon immediately after recording one
 project memory. Latency is client wall time including process startup, Unix
 IPC, search and JSON decoding. Each warm p95 uses five repetitions of every
-query with global included. RSS is the whole daemon's resident set from
-`ps -o rss=`, sampled just after the first query in each state. These numbers
-depend on host and dataset size.
+query with global included. RSS is the whole daemon's resident set sampled
+just after the first query in each state. The observer uses `ps -o rss=` on Linux
+and the native `proc_pidinfo(PROC_PIDTASKINFO)` interface on macOS.
+These numbers depend on host and dataset size.
 
 On Linux amd64 (AMD EPYC 9V74, Go 1.27.4, LadybugDB 0.17.0), the GloVe
 baseline returned 5/7 expected sources and 10 irrelevant results out of 21
