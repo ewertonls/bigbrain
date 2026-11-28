@@ -180,7 +180,9 @@ The release workflow fetches and verifies the pinned bundle during setup.
 The Linux amd64 job runs inference in an empty network namespace and checks
 that IPv4 and IPv6 have no external route while Unix IPC works. The macOS
 ARM64 job runs the relocated package outside the checkout and verifies the
-loaded LadybugDB dylib. Its runner retains ordinary network access. Both jobs
+loaded LadybugDB dylib. It tests a per-process sandbox for IPv4/IPv6 denial
+and named Unix IPC before running the CLI. If the host cannot enforce that
+profile, the log identifies the run as native macOS with networking available. Both jobs
 generate official reference vectors and save per-query results, timings and
 RSS for both fixtures as JSON artifacts.
 [Release validation workflow](../.github/workflows/blink-release.yml)
