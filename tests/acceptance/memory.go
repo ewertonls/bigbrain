@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -121,12 +122,27 @@ func runMemoryEvaluation(c cli, fixturePath string) {
 	require(model != "", "set BIGBRAIN_EMBEDDINGS to the local evaluation model")
 	model, err = filepath.Abs(model)
 	check(err)
-	file, err := os.Open(model)
+	paths := []string{model}
+	weightsName := filepath.Base(model)
+	info, err := os.Stat(model)
 	check(err)
-	digest := sha256.New()
-	_, err = io.Copy(digest, file)
-	check(err)
-	check(file.Close())
+	if info.IsDir() {
+		paths = nil
+		weightsName = "model.safetensors"
+		for _, name := range []string{"config.json", "tokenizer.json", "model.safetensors"} {
+			paths = append(paths, filepath.Join(model, name))
+		}
+	}
+	hashes := make(map[string]string)
+	for _, path := range paths {
+		file, err := os.Open(path)
+		check(err)
+		digest := sha256.New()
+		_, err = io.Copy(digest, file)
+		check(err)
+		check(file.Close())
+		hashes[filepath.Base(path)] = hex.EncodeToString(digest.Sum(nil))
+	}
 	c.env = []string{"BIGBRAIN_EMBEDDINGS=" + model, "BIGBRAIN_VECTOR_INDEX="}
 	defer func() { c.run("shutdown") }()
 	memories, ids := f.seed(c)
@@ -141,11 +157,20 @@ func runMemoryEvaluation(c cli, fixturePath string) {
 			require(!wordsInCommon(q.Search, memories[q.Expected].Text), "paraphrase shares a term with its target: %s", q.Search)
 		}
 	}
+	shutdown(c) // Measure startup under the same conditions for fresh and populated caches.
 	start := time.Now()
 	warm := f.query(c, evaluationQuery{f.Questions[0].Search, "hybrid", true})
 	firstHybrid := time.Since(start).Microseconds()
 	require(warm.Fallback == "", "configured model fell back: %s", warm.Fallback)
 
+	rss := func() int {
+		data, err := exec.Command("ps", "-o", "rss=", "-p", strconv.Itoa(status(c).PID)).Output()
+		check(err)
+		kib, err := strconv.Atoi(strings.TrimSpace(string(data)))
+		check(err)
+		return kib
+	}
+	freshRSS := rss()
 	const repetitions = 5
 	original := make(map[evaluationQuery]protocol.QueryResult)
 	scores := make(map[string]modeScore)
@@ -160,7 +185,7 @@ func runMemoryEvaluation(c cli, fixturePath string) {
 			got := f.query(c, key)
 			original[key] = got
 			f.checkRanking(key, got, byID)
-			require(got.Fallback == "", "unexpected fallback for %q: %s", q.Search, got.Fallback)
+			require(got.Fallback == "" || got.Fallback == "no_query_embedding", "unexpected fallback for %q: %s", q.Search, got.Fallback)
 			row := questionScore{Search: q.Search, Returned: []string{}}
 			for _, m := range got.Matches {
 				label := byID[m.ID].Key
@@ -206,6 +231,34 @@ func runMemoryEvaluation(c cli, fixturePath string) {
 		}
 	}
 	shutdown(c)
+	start = time.Now()
+	reopened := f.query(c, evaluationQuery{f.Questions[0].Search, "hybrid", true})
+	restartUS := time.Since(start).Microseconds()
+	require(reflect.DeepEqual(reopened, warm), "populated cache changed first query")
+	restartRSS := rss()
+	warmP95 := func() int64 {
+		var samples []int64
+		for _, q := range f.Questions {
+			for range repetitions {
+				start := time.Now()
+				f.query(c, evaluationQuery{q.Search, "hybrid", true})
+				samples = append(samples, time.Since(start).Microseconds())
+			}
+		}
+		slices.Sort(samples)
+		return samples[(95*len(samples)+99)/100-1]
+	}
+	restartP95 := warmP95()
+	written := write(c, recordArgs("timing-write", "One new memory for the write latency measurement.", "Timing sample", "--project", f.Project)...)
+	start = time.Now()
+	afterWrite := f.query(c, evaluationQuery{f.Questions[0].Search, "hybrid", true})
+	afterWriteUS := time.Since(start).Microseconds()
+	require(afterWrite.Fallback == "", "post-write query fell back")
+	afterWriteRSS := rss()
+	afterWriteP95 := warmP95()
+	// Remove the timing sample before comparing with the original controls.
+	write(c, "delete", "--key", "remove-timing-write", "--id", written.ID, "--project", f.Project)
+	shutdown(c)
 	c.env = []string{"BIGBRAIN_EMBEDDINGS=" + filepath.Join(c.db, "absent-model"), "BIGBRAIN_VECTOR_INDEX="}
 	for key, before := range original {
 		after := f.query(c, key)
@@ -220,13 +273,19 @@ func runMemoryEvaluation(c cli, fixturePath string) {
 	shutdown(c)
 
 	check(json.NewEncoder(os.Stdout).Encode(map[string]any{
-		"model_sha256": hex.EncodeToString(digest.Sum(nil)), "limit": f.Limit, "warm_queries_per_mode": len(f.Questions) * repetitions,
-		"first_hybrid_us": firstHybrid, "scores": scores, "scope_comparisons": 2 * len(original), "fallback_comparisons": len(original),
+		"model_sha256": hashes[weightsName], "model_files_sha256": hashes,
+		"limit": f.Limit, "warm_queries_per_mode": len(f.Questions) * repetitions,
+		"first_hybrid_us": firstHybrid, "populated_restart_us": restartUS, "after_write_us": afterWriteUS,
+		"daemon_rss_kib":     map[string]int{"fresh": freshRSS, "restart": restartRSS, "after_write": afterWriteRSS},
+		"warm_hybrid_p95_us": map[string]int64{"fresh": scores["hybrid"].P95US, "restart": restartP95, "after_write": afterWriteP95},
+		"scores":             scores, "scope_comparisons": 2 * len(original), "fallback_comparisons": len(original),
 	}))
 	for i, q := range f.Questions {
 		if q.Kind == "direct" && scores["text"].Questions[i].Hit {
 			require(scores["hybrid"].Questions[i].Hit, "lost direct hit for %q", q.Search)
 		}
 	}
-	require(scores["hybrid"].Hits["paraphrase"] > max(scores["text"].Hits["paraphrase"], scores["associative"].Hits["paraphrase"]), "hybrid did not gain paraphrase hits")
+	if slices.ContainsFunc(f.Questions, func(q evaluationQuestion) bool { return q.Kind == "paraphrase" }) {
+		require(scores["hybrid"].Hits["paraphrase"] > max(scores["text"].Hits["paraphrase"], scores["associative"].Hits["paraphrase"]), "hybrid did not gain paraphrase hits")
+	}
 }

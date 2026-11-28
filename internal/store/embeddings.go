@@ -3,13 +3,51 @@ package store
 import (
 	"bufio"
 	"compress/gzip"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"math"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/ewertonls/bigbrain/internal/blink"
 )
+
+// Development value pending the pinned release sweep in TestBlinkCutoffCalibration.
+const blinkMinCosine = 0.20
+
+type encoder struct {
+	encode      func(string) []float32
+	dim         int
+	fingerprint [sha256.Size]byte
+	minCosine   float64
+}
+
+func loadEmbeddings(path string) (*encoder, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		model, err := blink.Load(path)
+		if err != nil {
+			return nil, err
+		}
+		encode := func(text string) []float32 {
+			vector, ok := model.Encode(text)
+			if !ok {
+				return nil
+			}
+			return vector[:]
+		}
+		return &encoder{encode, blink.Dimension, model.Fingerprint, blinkMinCosine}, nil
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s: expected a Blink bundle directory or a regular word2vec file", path)
+	}
+	return loadWordVectors(path)
+}
 
 // Read local word2vec text vectors, optionally gzip-compressed. The first
 // line gives the vocabulary size and dimensions. No network access is needed.
@@ -18,13 +56,15 @@ type embeddings struct {
 	words map[string][]float32
 }
 
-func loadEmbeddings(path string) (*embeddings, error) {
+func loadWordVectors(path string) (*encoder, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
-	input := bufio.NewReader(file)
+	hash := sha256.New()
+	io.WriteString(hash, "bigbrain-word2vec-v1\x00")
+	input := bufio.NewReader(io.TeeReader(file, hash))
 	var source io.Reader = input
 	if magic, _ := input.Peek(2); string(magic) == "\x1f\x8b" {
 		z, err := gzip.NewReader(input)
@@ -73,7 +113,7 @@ func loadEmbeddings(path string) (*embeddings, error) {
 	if len(model.words) != size {
 		return nil, fmt.Errorf("expected %d word vectors, read %d", size, len(model.words))
 	}
-	return model, nil
+	return &encoder{model.encode, dim, [sha256.Size]byte(hash.Sum(nil)), 0.45}, nil
 }
 
 func (m *embeddings) encode(text string) []float32 {

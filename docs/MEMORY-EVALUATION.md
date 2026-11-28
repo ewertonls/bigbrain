@@ -8,7 +8,7 @@ at three results. A hit requires both the expected ID and its original source.
 Count each returned ID outside the question's relevance set as irrelevant.
 [Evaluation fixture](../tests/memory/fixture.json)
 
-## Results on Linux amd64
+## Original GloVe results on Linux amd64
 
 On the seven fixed questions, hybrid retrieval found two paraphrased sources
 and retained all three direct hits. Both Foundation modes missed all three
@@ -63,9 +63,10 @@ downloads.
 The exact-search check used vectors with independently calculated cosines of
 1, 0.6 and −1. Twelve closer private records left the ordered results and
 BM25 scores unchanged in both the second project and its union with global.
-A memory write evicts its scope's derived index after commit. The next search builds
-it from the database. Index memory grows with the scopes searched. Vector
-search scans every visible embedding and keeps only the top candidates.
+A memory write evicts its scope's derived index after commit. The next
+search reloads active memories from LadybugDB and reuses their persisted
+vectors. The daemon keeps global and one project in memory at a time.
+Vector search scans every visible embedding and keeps only the top candidates.
 
 On Linux amd64 with the 50-dimensional GloVe Wiki/Gigaword model, building
 text postings for the 14 visible fixture memories took 31.6 µs. Generating
@@ -73,7 +74,7 @@ their normalized embeddings took 16.1 µs. Building both together took
 47.6 µs and allocated 52,208 bytes per iteration. These in-process Go
 benchmarks exclude loading the vocabulary, reading LadybugDB and CLI startup.
 
-## Reproduction
+## Reproducing the original baseline
 
 Configure the pinned GloVe model as described in the README, then run the
 native evaluation from the repository root. It creates a disposable database,
@@ -86,8 +87,102 @@ make evaluate-memory
 ```
 
 The ranker uses BM25 with k1 of 1.2 and b of 0.75. A direct match contributes
-`BM25 / (1 + BM25)`. Cosines of at least 0.45 contribute `0.65 × cosine`.
+`BM25 / (1 + BM25)`. GloVe cosines of at least 0.45 contribute `0.65 × cosine`.
 Each of the top `max(limit, 5)` seeds can contribute up to five visible
 neighbors. A target receives its strongest graph contribution,
 `0.8 × seed score × weight / (1 + weight)`, once. The experiment used
 the default unit link weight and the original GloVe vocabulary throughout.
+
+## Blink and the persistent index
+
+The original seven questions are the calibration set. The sweep tests
+thresholds from 0.025 through 1 in increments of 0.025 and runs the
+store's production hybrid ranker on the original scopes, links, limit and
+relevance judgments. Choose the cutoff with the most expected sources in
+the top three, then the fewest irrelevant results among those cutoffs.
+The eight held-out questions cover Portuguese queries over English memories,
+literal identifiers and decisions with a closely related, contradictory
+answer. Only the historical or current decision requested by the question
+counts as relevant. Held-out judgments are fixed before the sweep.
+[Calibration fixture](../tests/memory/fixture.json) · [Held-out fixture](../tests/memory/held-out.json)
+
+Release validation is pending. The current development cutoff of 0.20
+still needs the sweep on the verified Blink bundle. The measurements
+below cover GloVe. The checked-in token and vector goldens use the
+deterministic int8 table described under Reproduction.
+
+### Native CLI measurement
+
+The evaluation starts each model with a new temporary database and records
+the fixture through the binary. The first fresh-cache query starts a stopped
+daemon. The restart query starts it again with populated vectors on disk.
+The single-write query runs on a warm daemon immediately after recording one
+project memory. Latency is client wall time including process startup, Unix
+IPC, search and JSON decoding. Each warm p95 uses five repetitions of every
+query with global included. RSS is the whole daemon's resident set from
+`ps -o rss=`, sampled just after the first query in each state. These numbers
+depend on host and dataset size.
+
+On Linux amd64 (AMD EPYC 9V74, Go 1.27.4, LadybugDB 0.17.0), the GloVe
+baseline returned 5/7 expected sources and 10 irrelevant results out of 21
+on the calibration fixture. On the held-out fixture it returned 4/8 expected
+sources and 6 irrelevant results out of 10. It found both identifiers and two
+of the three conflict queries. It missed the three Portuguese-only prompts
+and the Portuguese conflict query.
+
+| GloVe data | Cache state | First query (ms) | Warm p95 (ms) | Daemon RSS (MiB) |
+| --- | --- | ---: | ---: | ---: |
+| Original | Fresh | 3,082.1 | 44.1 | 272.4 |
+| Original | Restart | 2,597.9 | 43.8 | 279.7 |
+| Original | One write | 37.5 | 43.6 | 323.8 |
+| Held-out | Fresh | 2,632.4 | 40.4 | 277.5 |
+| Held-out | Restart | 2,529.5 | 37.8 | 270.5 |
+| Held-out | One write | 42.7 | 37.9 | 293.8 |
+
+### Reproduction
+
+Run from the checkout root. `make evaluate-memory` exercises both fixtures
+and reports per-question source hits, returned keys, irrelevant counts,
+timings and process RSS. The store tests count actual document encodes on
+restart, scope changes and interrupted rebuilds. The CLI check uses a real
+terminal for stderr and parses stdout independently.
+
+```sh
+./scripts/download-blink.sh build/models/blink
+export BIGBRAIN_BLINK_BUNDLE="$PWD/build/models/blink"
+export BIGBRAIN_EMBEDDINGS="$BIGBRAIN_BLINK_BUNDLE"
+```
+
+The golden generator runs only during development. It uses the official
+Model2Vec Python API and its pinned tokenizer/backend to produce token IDs
+and all 256 float32 coordinates. The Go test compares absolute coordinate
+errors to `1e-6`. A small deterministic table exercises the same code path
+in the standard suite. Generate the release golden file from the verified
+local bundle before running the release tests.
+
+```sh
+python3 -m venv /tmp/bigbrain-reference
+/tmp/bigbrain-reference/bin/pip install model2vec==0.11.0 model2vec-rs==0.5.1 tokenizers==0.23.3 numpy==2.4.4
+/tmp/bigbrain-reference/bin/python tests/memory/blink_reference.py "$BIGBRAIN_BLINK_BUNDLE"
+# To regenerate the small deterministic fixture, omit the bundle argument.
+```
+
+Run the cutoff sweep from the checkout root with the same native
+library flags as the Makefile.
+
+```sh
+make build
+CGO_CFLAGS="-I$PWD/lib-ladybug" CGO_LDFLAGS="-L$PWD/lib-ladybug" \
+  go test -tags system_ladybug -ldflags "-r '$PWD/lib-ladybug'" \
+  -run '^TestBlinkCutoffCalibration$' -v ./internal/store
+```
+
+Use the selected cutoff for both fixtures. Run the CLI check with
+network access disabled after downloading the bundles.
+
+```sh
+make test
+make evaluate-memory
+python3 tests/memory/cli_blink.py ./build/bigbrain "$BIGBRAIN_BLINK_BUNDLE"
+BIGBRAIN_EMBEDDINGS="$PWD/build/models/glove-50.gz" make evaluate-memory
+```

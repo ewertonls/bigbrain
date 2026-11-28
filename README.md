@@ -205,21 +205,39 @@ the relationships.
 
 ## Offline hybrid search
 
-Configure the daemon with a local word2vec text vocabulary. The file begins
-with the word count and dimension, followed by one word and its vector per
-line. Plain text and gzip are supported. For each word used in an embedding,
-BigBrain tries the original spelling first, then its lowercase form.
-The evaluation used Stanford GloVe
-Wiki/Gigaword, 400,000 words and 50 dimensions. Download it once during
-setup. The daemon reads the local file when it first receives a hybrid query.
+Use **Blink multilingual 64M int8** for local hybrid search. BigBrain runs
+the WordPiece tokenizer, pools the packed int8 rows and normalizes the
+256-dimensional result in Go. Install the model once while online. The
+download script fetches `model.safetensors`, `tokenizer.json` and `config.json`
+at revision `de97a396996d93b039aa48463ab34f5459657529` and verifies each
+file with SHA-256 before installing the directory. Rerunning it on an
+existing installation verifies the files locally.
+[Model release](https://huggingface.co/minishlab/blink-multilingual-64M-int8/tree/de97a396996d93b039aa48463ab34f5459657529) · [Checksums](scripts/blink.sha256)
+
+```sh
+./scripts/download-blink.sh build/models/blink
+export BIGBRAIN_EMBEDDINGS="$PWD/build/models/blink"
+./build/bigbrain shutdown
+./build/bigbrain --json query --current-project --text 'cópias de segurança' --limit 3
+```
+
+For an offline installation, copy the verified directory and point
+`BIGBRAIN_EMBEDDINGS` at its absolute path before starting BigBrain. Recording
+and querying use the local binary, its existing LadybugDB library and the
+bundle. Model installation is always explicit.
+
+A regular file selects the existing word2vec backend. It accepts plain or
+gzipped text with a vocabulary size and dimension in the header, and preserves
+the original case lookup with lowercase fallback. Use the 50-dimensional GloVe
+Wiki/Gigaword model to reproduce the baseline.
 
 ```sh
 mkdir -p build/models
 curl -fL -o build/models/glove-50.gz https://github.com/piskvorky/gensim-data/releases/download/glove-wiki-gigaword-50/glove-wiki-gigaword-50.gz
+# On macOS, use shasum -a 256 -c - in place of sha256sum -c -.
 echo '5c55f98957aa9fed8d2ac5fb1dcff57af3b23c5a3ee7af3f7945f8d49198eb24  build/models/glove-50.gz' | sha256sum -c -
 export BIGBRAIN_EMBEDDINGS="$PWD/build/models/glove-50.gz"
-bigbrain shutdown
-bigbrain --json query --current-project --mode hybrid --text 'shipping binaries' --limit 3
+./build/bigbrain shutdown
 ```
 
 The result includes the memory source and a `reason` with the contributing
@@ -229,12 +247,34 @@ and source. The final score combines normalized BM25, cosine and the best
 weighted graph contribution. Ties break by memory ID. The `count` includes
 the unique candidates before the output limit.
 
-If the model is missing, unreadable, or has no usable embedding, hybrid
-returns associative results with the same depth and neighbor limits and a
-machine-readable `fallback` reason.
-Start the daemon with `BIGBRAIN_VECTOR_INDEX=off` to disable the vector
-index. Restart it after changing its environment or vocabulary. All searches
-run locally. [GloVe model and license](https://nlp.stanford.edu/projects/glove/)
+LadybugDB determines which memories and edges are visible. A private
+`memory.lbug.vectors` file next to the graph holds derived vectors for both
+backends. Each entry belongs to one scope and memory ID and is keyed to the
+memory text, the model files and the encoder version. All projects reuse
+the same global entries. The daemon retains search indexes for global and
+the most recently searched project. Exact cosine search scans the active
+vectors in the scopes selected for each query.
+
+After recording or updating text, the next hybrid search encodes just the
+missing or changed memories in its scopes. Invalidation and deletion take
+effect as soon as the graph write commits. On a daemon restart, a search
+reads matching entries from disk. When model files change, BigBrain loads
+the new encoder and rebuilds affected scopes on demand. Restart the daemon
+after changing the path in its environment. To force a complete rebuild,
+stop the daemon and move `memory.lbug.vectors` aside.
+
+While a query has pending work, a terminal on stderr shows the phase
+(`invalidation` or `recalculation`), scope and completed/total memories.
+Each count advances after a durable cache change. Interrupting the rebuild
+preserves completed entries. Cache hits are quiet, and `--json` writes its
+regular response to stdout.
+
+A missing or malformed bundle, unavailable cache, or text without a usable
+vector selects associative retrieval with the same visibility, depth and
+neighbor limits. The JSON result includes a `fallback` reason. For a load
+failure the CLI points to the affected database's `daemon.log`.
+Start the daemon with `BIGBRAIN_VECTOR_INDEX=off` to disable vector search.
+[Retrieval evaluation](docs/MEMORY-EVALUATION.md) · [GloVe license](https://nlp.stanford.edu/projects/glove/)
 
 ## Propose a project lesson
 

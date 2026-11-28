@@ -50,8 +50,9 @@ Run bigbrain COMMAND -h for command flags.
 `
 
 type options struct {
-	db   string
-	json bool
+	db       string
+	json     bool
+	progress func(protocol.IndexProgress)
 }
 
 type scopeOptions struct {
@@ -101,7 +102,12 @@ func runDaemon(args []string) error {
 
 func run(args []string, stdout, stderr io.Writer) error {
 	var options options
+	options.progress = terminalProgress(stderr)
 	result, err := execute(args, &options)
+	if q, ok := result.(protocol.QueryResult); ok && (q.Fallback == "model_unavailable" || q.Fallback == "vector_cache_unavailable") {
+		path, _ := databasePath(options.db)
+		fmt.Fprintf(stderr, "Hybrid search used associative fallback (%s). See %s for the affected file and recovery details.\n", q.Fallback, filepath.Join(path, "daemon.log"))
+	}
 	if stream, ok := result.(streamOutput); ok {
 		if err := stream(stdout); err != nil {
 			fmt.Fprintln(stderr, err)
@@ -335,7 +341,7 @@ func execute(args []string, options *options) (any, error) {
 		if err != nil {
 			return parseError(flags, err)
 		}
-		matches, err := callDaemon[protocol.QueryResult](context.Background(), path, "query", request)
+		matches, err := callDaemon[protocol.QueryResult](daemon.WithQueryProgress(context.Background(), options.progress), path, "query", request)
 		if err != nil {
 			return nil, err
 		}
@@ -459,8 +465,11 @@ func (o *options) parseDataRequest(flags *flag.FlagSet, args []string, selection
 
 func callDaemon[R any](ctx context.Context, path, operation string, request any) (R, error) {
 	var result R
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
+	if operation != "query" {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+	}
 	client, err := daemon.Connect(ctx, path, true)
 	if err == nil {
 		err = client.Call(ctx, operation, request, &result)

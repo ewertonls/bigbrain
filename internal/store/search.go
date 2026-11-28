@@ -17,11 +17,12 @@ type indexedMemory struct {
 }
 
 type scopeIndex struct {
-	docs           map[string]*indexedMemory
-	postings       map[string]map[string]int
-	totalLength    int
-	vectorsIndexed bool
-	embeddedDocs   int
+	docs         map[string]*indexedMemory
+	postings     map[string]map[string]int
+	totalLength  int
+	scope        string
+	indexedBy    *encoder
+	embeddedDocs int
 }
 
 // A request searches one scope or the union of a project and global.
@@ -34,6 +35,10 @@ func (s *Store) visibleIndexes(request protocol.QueryRequest) (collection, error
 	}
 	var visible collection
 	for _, scope := range scopes {
+		if scope != "global" && scope != s.projectIndex {
+			delete(s.indexes, s.projectIndex)
+			s.projectIndex = scope
+		}
 		idx := s.indexes[scope]
 		if idx == nil {
 			memories, err := s.visibleMemories(protocol.QueryRequest{Scope: scope})
@@ -41,6 +46,7 @@ func (s *Store) visibleIndexes(request protocol.QueryRequest) (collection, error
 				return nil, err
 			}
 			idx = buildIndex(memories)
+			idx.scope = scope
 			if len(memories) != 0 {
 				s.indexes[scope] = idx
 			}
@@ -126,23 +132,6 @@ func (c collection) textMatches(text string) []protocol.Match {
 		return cmp.Compare(a.ID, b.ID)
 	})
 	return matches
-}
-
-func (c collection) indexVectors(model *embeddings) bool {
-	count := 0
-	for _, idx := range c {
-		if !idx.vectorsIndexed {
-			for _, doc := range idx.docs {
-				doc.vector = model.encode(doc.Text)
-				if len(doc.vector) != 0 {
-					idx.embeddedDocs++
-				}
-			}
-			idx.vectorsIndexed = true
-		}
-		count += idx.embeddedDocs
-	}
-	return count > 0
 }
 
 // All indexed vectors have unit length. Keep the best k while scanning visible scopes.
