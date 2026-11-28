@@ -152,6 +152,22 @@ and the Portuguese conflict query.
 | Held-out | Restart | 2,529.5 | 37.8 | 270.5 |
 | Held-out | One write | 42.7 | 37.9 | 293.8 |
 
+The following Blink measurements used the compiled CLI with the verified
+release on a separate GitHub-hosted Ubuntu 24.04 amd64 runner with Go 1.26.11.
+The runner verified that the inference processes could use Unix IPC and had
+no external IPv4 or IPv6 route. Its CLI reproduced the source hits and
+irrelevant counts from the store evaluation on both fixtures.
+[Linux validation log and artifacts](https://github.com/ewertonls/bigbrain/actions/runs/46123716970/job/140913570695)
+
+| Blink data | Cache state | First query (ms) | Warm p95 (ms) | Daemon RSS (MiB) |
+| --- | --- | ---: | ---: | ---: |
+| Original | Fresh | 243.8 | 22.6 | 178.9 |
+| Original | Restart | 239.9 | 24.7 | 179.4 |
+| Original | One write | 18.7 | 25.0 | 197.7 |
+| Held-out | Fresh | 442.1 | 30.2 | 178.1 |
+| Held-out | Restart | 227.1 | 39.1 | 176.1 |
+| Held-out | One write | 13.0 | 31.9 | 204.8 |
+
 ### Reproduction
 
 Run from the checkout root. `make evaluate-memory` exercises both fixtures

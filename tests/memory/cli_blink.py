@@ -1,5 +1,4 @@
 """Exercise the compiled CLI, its daemon and an offline Blink directory on Linux or macOS."""
-import errno
 import json
 import os
 from pathlib import Path
@@ -27,14 +26,17 @@ def main(binary, bundle):
             master, slave = pty.openpty()
             try:
                 with os.fdopen(slave, "wb") as stderr:
+                    assert os.isatty(stderr.fileno())
                     proc = subprocess.run(cmd, cwd=root, env=env, stdout=subprocess.PIPE, stderr=stderr, timeout=60)
-                output = bytearray()
-                try:
-                    while block := os.read(master, 4096):
-                        output.extend(block)
-                except OSError as e:
-                    if e.errno != errno.EIO:
-                        raise
+                    # macOS can discard pending bytes on the last slave close.
+                    # The child has exited, so everything it wrote is ready to drain.
+                    os.set_blocking(master, False)
+                    output = bytearray()
+                    try:
+                        while block := os.read(master, 4096):
+                            output.extend(block)
+                    except BlockingIOError:
+                        pass
                 if proc.returncode:
                     raise RuntimeError((proc.stdout, bytes(output)))
                 return proc.stdout, bytes(output)
