@@ -1,6 +1,6 @@
 """Generate token IDs and normalized vectors using the official, local-only reference.
 
-Usage: python tests/memory/blink_reference.py [verified-bundle-directory]
+Usage: python tests/memory/blink_reference.py [verified-bundle-directory [output.json]]
 With no argument, regenerate the small deterministic fixture used by make test.
 """
 import base64
@@ -90,7 +90,8 @@ if __name__ == "__main__":
             checksum, name = line.split()
             if hashlib.sha256((bundle / name).read_bytes()).hexdigest() != checksum:
                 raise ValueError(f"{name}: incorrect release checksum")
-        generate(bundle, OUT / "blink.json")
+        output = Path(sys.argv[2]) if len(sys.argv) > 2 else OUT / "blink.json"
+        generate(bundle, output)
     else:
         with tempfile.TemporaryDirectory() as d:
             bundle = Path(d)

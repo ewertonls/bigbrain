@@ -14,8 +14,8 @@ import (
 	"github.com/ewertonls/bigbrain/internal/blink"
 )
 
-// Development value pending the pinned release sweep in TestBlinkCutoffCalibration.
-const blinkMinCosine = 0.20
+// Selected on the original retrieval fixture by TestBlinkCutoffCalibration.
+const blinkMinCosine = 0.15
 
 type encoder struct {
 	encode      func(string) []float32

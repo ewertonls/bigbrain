@@ -106,10 +106,23 @@ answer. Only the historical or current decision requested by the question
 counts as relevant. Held-out judgments are fixed before the sweep.
 [Calibration fixture](../tests/memory/fixture.json) · [Held-out fixture](../tests/memory/held-out.json)
 
-Release validation is pending. The current development cutoff of 0.20
-still needs the sweep on the verified Blink bundle. The measurements
-below cover GloVe. The checked-in token and vector goldens use the
-deterministic int8 table described under Reproduction.
+The verified Blink release produced one winning cutoff, **0.15**. The
+production Go ranker over a disposable LadybugDB found the expected source
+in the top three on 6/7 original questions, with 3 irrelevant results out of 15 returned.
+Holding that cutoff fixed, it found 8/8 expected sources on the held-out
+fixture, with 9 irrelevant results out of 17 returned. The GloVe CLI
+baseline found 4/8 held-out sources, with 6 irrelevant results out of 10.
+Blink retrieved four additional expected sources and three additional
+irrelevant results on that fixture.
+
+| Fixture | Blink hits at 3 | Blink irrelevant / returned | GloVe hits at 3 | GloVe irrelevant / returned |
+| --- | ---: | ---: | ---: | ---: |
+| Original | 6/7 | 3/15 | 5/7 | 10/21 |
+| Held-out | 8/8 | 9/17 | 4/8 | 6/10 |
+
+The Go encoder matched token IDs and all 256 coordinates across 14 cases
+on the verified release against the pinned Model2Vec reference, with an
+absolute coordinate tolerance of `1e-6`.
 
 ### Native CLI measurement
 
@@ -146,6 +159,15 @@ and reports per-question source hits, returned keys, irrelevant counts,
 timings and process RSS. The store tests count actual document encodes on
 restart, scope changes and interrupted rebuilds. The CLI check uses a real
 terminal for stderr and parses stdout independently.
+
+The release workflow fetches and verifies the pinned bundle during setup.
+The Linux amd64 job runs inference in an empty network namespace and checks
+that IPv4 and IPv6 have no external route while Unix IPC works. The macOS
+ARM64 job runs the relocated package outside the checkout and verifies the
+loaded LadybugDB dylib. Its runner retains ordinary network access. Both jobs
+generate official reference vectors and save per-query results, timings and
+RSS for both fixtures as JSON artifacts.
+[Release validation workflow](../.github/workflows/blink-release.yml)
 
 ```sh
 ./scripts/download-blink.sh build/models/blink

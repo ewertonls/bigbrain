@@ -94,7 +94,20 @@ def main(binary, bundle):
             assert json.loads(raw)["result"]["fallback"] == "model_unavailable"
         finally:
             run("shutdown")
-    print("CLI passed: Blink cosine, TTY progress, JSON, project isolation, shared global cache, restart, single write, tokenizer replacement and fallback")
+
+        db = root / "fresh-database"
+        env["BIGBRAIN_EMBEDDINGS"] = str(root / "missing-bundle")
+        try:
+            run("record", "--current-project", "--key", "fallback", "--text", "queue", "--source", "Fallback control")
+            raw, diagnostic = run("--json", *query)
+            fallback = json.loads(raw)["result"]
+            assert fallback.pop("fallback") == "model_unavailable" and b"daemon.log" in diagnostic
+            assert fallback["matches"][0]["source"] == "Fallback control"
+            control, _ = run("--json", "query", "--current-project", "--include-global", "--mode", "associative", "--text", "queue")
+            assert fallback == json.loads(control)["result"]
+        finally:
+            run("shutdown")
+    print("CLI passed: Blink cosine, TTY progress, JSON, project isolation, shared global cache, restart, single write, tokenizer replacement and fresh missing-model fallback")
 
 
 if __name__ == "__main__":
