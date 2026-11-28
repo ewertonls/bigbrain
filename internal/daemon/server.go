@@ -194,7 +194,7 @@ func (s *serverState) routes() http.Handler {
 	mux.HandleFunc("POST /v1/delete", operation(s, s.database.Delete))
 	mux.HandleFunc("POST /v1/browse", operation(s, s.database.Browse))
 	mux.HandleFunc("POST /v1/history", operation(s, s.database.History))
-	mux.HandleFunc("POST /v1/query", operation(s, s.database.Query))
+	mux.HandleFunc("POST /v1/query", requestOperation(s, s.queryWithProgress))
 	mux.HandleFunc("POST /v1/shutdown", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.verifyRequest(r); err != nil {
 			respond(w, nil, err)
@@ -220,6 +220,10 @@ func (s *serverState) verifyRequest(r *http.Request) error {
 }
 
 func operation[Request interface{ Validate() error }, Result any](s *serverState, execute func(Request) (Result, error)) http.HandlerFunc {
+	return requestOperation(s, func(_ http.ResponseWriter, _ *http.Request, req Request) (Result, error) { return execute(req) })
+}
+
+func requestOperation[Request interface{ Validate() error }, Result any](s *serverState, execute func(http.ResponseWriter, *http.Request, Request) (Result, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := s.verifyRequest(r); err != nil {
 			respond(w, nil, err)
@@ -241,7 +245,7 @@ func operation[Request interface{ Validate() error }, Result any](s *serverState
 			respond(w, nil, err)
 			return
 		}
-		result, err := executeLocked(&s.databaseMu, execute, request)
+		result, err := executeLocked(&s.databaseMu, func(req Request) (Result, error) { return execute(w, r, req) }, request)
 		respond(w, result, err)
 	}
 }

@@ -12,6 +12,15 @@ import (
 	"github.com/ewertonls/bigbrain/internal/protocol"
 )
 
+// The exact-search tests and CPU benchmarks build their input vectors in RAM.
+func fillTestVectors(indexes collection, encode func(string) []float32) {
+	for _, idx := range indexes {
+		for _, doc := range idx.docs {
+			doc.vector = encode(doc.Text)
+		}
+	}
+}
+
 func TestVisibleBM25AndExactNeighbors(t *testing.T) {
 	db := openTestStore(t, filepath.Join(t.TempDir(), "store.lbug"))
 	record := func(scope, key, text string) string {
@@ -27,7 +36,7 @@ func TestVisibleBM25AndExactNeighbors(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		visible.indexVectors(model)
+		fillTestVectors(visible, model.encode)
 		got := visible.nearest(model.encode("x"), 2)
 		expected := []string{near, far}
 		cosines := []float64{0.6, -1}
@@ -66,7 +75,7 @@ func TestNearestBreaksTiesAcrossScopes(t *testing.T) {
 		buildIndex([]protocol.Memory{{ID: "a", Text: "car"}}),
 	}
 	model := &embeddings{dim: 1, words: map[string][]float32{"car": {1}}}
-	indexes.indexVectors(model)
+	fillTestVectors(indexes, model.encode)
 	got := indexes.nearest(model.encode("car"), 1)
 	if len(got) != 1 || got[0].ID != "a" {
 		t.Fatalf("nearest = %+v, want a", got)
@@ -139,7 +148,7 @@ func BenchmarkMemoryIndex(b *testing.B) {
 	})
 	b.Run("text-and-vectors", func(b *testing.B) {
 		for b.Loop() {
-			collection{buildIndex(memories)}.indexVectors(model)
+			fillTestVectors(collection{buildIndex(memories)}, model.encode)
 		}
 	})
 }

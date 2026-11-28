@@ -1,0 +1,131 @@
+name: Blink release validation
+
+on:
+  push:
+    branches: [feat/blink-offline-embeddings]
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/blink-release.yml'
+      - 'cmd/bigbrain/**'
+      - 'internal/**'
+      - 'plugins/bigbrain/scripts/bigbrain'
+      - 'scripts/blink.sha256'
+      - 'scripts/download-*.sh'
+      - 'tests/acceptance/**'
+      - 'tests/memory/**'
+      - 'go.*'
+      - 'Makefile'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            label: Linux amd64 offline
+            arch: x86_64
+          - runner: macos-15
+            label: macOS ARM64 relocated package
+            arch: arm64
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+      - name: Verify model files and generate official reference vectors
+        shell: bash
+        run: |
+          test "$(uname -m)" = '${{ matrix.arch }}'
+          work="$RUNNER_TEMP/blink-validation"
+          mkdir -p "$work/results/reference/testdata"
+          scripts/download-blink.sh "$work/model"
+          python3 -m venv "$work/reference-env"
+          "$work/reference-env/bin/python" -m pip install --only-binary=:all: \
+            model2vec==0.11.0 model2vec-rs==0.5.1 tokenizers==0.23.3 numpy==2.4.4
+          HF_HUB_OFFLINE=1 "$work/reference-env/bin/python" tests/memory/blink_reference.py \
+            "$work/model" "$work/results/reference/testdata/blink.json"
+      - name: Build native test binaries and BigBrain
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/blink-validation"
+          make test
+          if [[ "$(uname -s)" == Darwin ]]; then
+            make package-macos-arm64
+            cp -R dist/macos-arm64 "$work/relocated"
+          else
+            make build
+            mkdir -p "$work/relocated/bin"
+            cp build/bigbrain "$work/relocated/bin/"
+          fi
+          export CGO_CFLAGS="-I$PWD/lib-ladybug" CGO_LDFLAGS="-L$PWD/lib-ladybug"
+          flags=(-tags system_ladybug -ldflags "-r '$PWD/lib-ladybug'")
+          go test -c -o "$work/blink.test" ./internal/blink
+          go test -c "${flags[@]}" -o "$work/store.test" ./internal/store
+          go build "${flags[@]}" -o "$work/acceptance" ./tests/acceptance
+      - name: Run native retrieval and measure both fixtures
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/blink-validation"
+          if [[ "$(uname -s)" == Linux ]]; then
+            # Create an empty network namespace, then drop privileges before running any tests.
+            sudo -n unshare --net -- setpriv --reuid="$(id -u)" --regid="$(id -g)" \
+              --init-groups --no-new-privs env -i HOME="$HOME" PATH="$PATH" LANG=C.UTF-8 \
+              bash "$GITHUB_WORKSPACE/tests/memory/validate-release.sh" "$work"
+          else
+            # The per-process profile is inherited by the CLI and its daemon.
+            profile='(version 1) (allow default)
+              (deny network-outbound) (allow network-outbound (remote unix-socket))
+              (deny network-bind) (allow network-bind (local unix-socket))
+              (deny network-inbound) (allow network-inbound (local unix-socket))'
+            if /usr/bin/sandbox-exec -p "$profile" python3 tests/memory/check-offline.py; then
+              echo "Running macOS validation under the verified Unix-only profile."
+              /usr/bin/sandbox-exec -p "$profile" bash tests/memory/validate-release.sh "$work"
+            else
+              echo "::notice::IP isolation unavailable. Running native macOS validation with networking available."
+              bash tests/memory/validate-release.sh "$work"
+            fi
+          fi
+      - name: Summarize source hits, irrelevant results and latency
+        shell: bash
+        run: |
+          python3 - "$RUNNER_TEMP/blink-validation/results" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+
+          print("| Fixture | Hits at 3 | Irrelevant / returned | Cache | First ms | Warm p95 ms | RSS MiB |")
+          print("| --- | ---: | ---: | --- | ---: | ---: | ---: |")
+          for name in ("fixture", "held-out"):
+              data = json.loads((Path(sys.argv[1]) / f"{name}.json").read_text())
+              score = data["scores"]["hybrid"]
+              questions = score["questions"]
+              hits = sum(q["hit"] for q in questions)
+              returned = sum(len(q["returned_keys"]) for q in questions)
+              for state, first in (("fresh", "first_hybrid_us"), ("restart", "populated_restart_us"), ("after_write", "after_write_us")):
+                  p95 = data["warm_hybrid_p95_us"][state] / 1000
+                  rss = data["daemon_rss_kib"][state] / 1024
+                  print(f"| {name} | {hits}/{len(questions)} | {score['irrelevant']}/{returned} | "
+                        f"{state} | {data[first] / 1000:.1f} | {p95:.1f} | {rss:.1f} |")
+          PY
+      - name: Retain fixture measurements and reference goldens
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: blink-results-${{ matrix.runner }}
+          path: ${{ runner.temp }}/blink-validation/results/
+          retention-days: 7

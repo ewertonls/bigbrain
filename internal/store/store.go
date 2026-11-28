@@ -7,8 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"time"
+
+	bolt "go.etcd.io/bbolt"
 
 	lbug "github.com/LadybugDB/go-ladybug"
 	"github.com/ewertonls/bigbrain/internal/protocol"
@@ -19,7 +22,12 @@ type Store struct {
 	database       *lbug.Database
 	connection     *lbug.Connection
 	indexes        map[string]*scopeIndex
-	model          *embeddings
+	model          *encoder
+	modelFiles     []modelFile
+	modelError     string
+	cachePath      string
+	cache          *bolt.DB
+	projectIndex   string
 	vectorFallback string
 
 	// The process-level acceptance tests use these transaction boundaries.
@@ -54,7 +62,7 @@ func Open(path string) (*Store, error) {
 		database.Close()
 		return nil, protocol.NewError("DATABASE_UNAVAILABLE", "Could not connect to LadybugDB: "+err.Error())
 	}
-	store := &Store{database: database, connection: connection, indexes: make(map[string]*scopeIndex)}
+	store := &Store{database: database, connection: connection, indexes: make(map[string]*scopeIndex), cachePath: path + ".vectors"}
 	if err := store.openSchema(); err != nil {
 		store.Close()
 		return nil, err
@@ -63,6 +71,9 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) Close() {
+	if s.cache != nil {
+		s.cache.Close()
+	}
 	s.connection.Close()
 	s.database.Close()
 }
@@ -182,6 +193,11 @@ CREATE (:Receipt {key: $key, operation: $operation, scope: $scope, fingerprint: 
 		delete(s.indexes, "global")
 	case "record", "invalidate", "delete", "consolidate", "reconcile":
 		delete(s.indexes, scope)
+	}
+	if operation == "invalidate" || operation == "delete" {
+		if err := s.removeVector(scope, result.ID); err != nil {
+			log.Printf("Cannot remove cached embedding for %s: %v", scope, err)
+		}
 	}
 	if s.AfterCommit != nil {
 		s.AfterCommit()

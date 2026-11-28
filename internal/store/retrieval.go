@@ -1,12 +1,17 @@
 package store
 
 import (
+	"context"
 	"errors"
 
 	"github.com/ewertonls/bigbrain/internal/protocol"
 )
 
 func (s *Store) Query(request protocol.QueryRequest) (protocol.QueryResult, error) {
+	return s.QueryWithProgress(context.Background(), request, nil)
+}
+
+func (s *Store) QueryWithProgress(ctx context.Context, request protocol.QueryRequest, progress func(protocol.IndexProgress)) (protocol.QueryResult, error) {
 	if err := request.Validate(); err != nil {
 		return protocol.QueryResult{}, err
 	}
@@ -33,7 +38,10 @@ func (s *Store) Query(request protocol.QueryRequest) (protocol.QueryResult, erro
 	var fallback string
 	if request.Mode == "hybrid" {
 		var vector []float32
-		vector, fallback = s.queryVector(request.Text, indexes)
+		vector, fallback, err = s.queryVector(ctx, request.Text, indexes, progress)
+		if err != nil {
+			return protocol.QueryResult{}, err
+		}
 		if fallback == "" {
 			matches, err = s.hybrid(request, indexes, matches, vector, limit)
 			if err != nil {

@@ -107,6 +107,14 @@ type WriteResult struct {
 	Replayed bool   `json:"replayed"`
 }
 
+// IndexProgress counts committed cache changes for one phase and visible scope.
+type IndexProgress struct {
+	Phase     string `json:"phase"`
+	Scope     string `json:"scope"`
+	Completed int    `json:"completed"`
+	Total     int    `json:"total"`
+}
+
 type QueryResult struct {
 	Fallback string  `json:"fallback,omitempty"`
 	Matches  []Match `json:"matches"`

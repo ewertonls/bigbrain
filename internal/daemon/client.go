@@ -158,6 +158,9 @@ func (c *Client) request(ctx context.Context, method, path string, body io.Reade
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	if path == "/v1/query" {
+		req = traceQueryProgress(req)
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return err

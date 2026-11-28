@@ -1,0 +1,28 @@
+{
+  "project": "harbor",
+  "limit": 3,
+  "memories": [
+    {"key":"ledger","scope":"harbor","text":"FlushLeaseJournal writes a durable receipt before acknowledging a payment.","source":"Harbor ledger audit 12"},
+    {"key":"archive","scope":"harbor","text":"Nightly backups are encrypted before they leave the host and copied to the recovery vault.","source":"Recovery drill 8"},
+    {"key":"batch-old","scope":"harbor","text":"The pilot used hourly batch delivery for warehouse shipments. This decision was retired before launch.","source":"Pilot decision 4"},
+    {"key":"batch-new","scope":"harbor","text":"The approved production policy sends warehouse shipments immediately, replacing the pilot's hourly batches.","source":"Production decision 19"},
+    {"key":"purge-old","scope":"harbor","text":"During the trial, operators deleted raw telemetry after seven days.","source":"Trial retention note"},
+    {"key":"purge-new","scope":"harbor","text":"The current policy retains raw telemetry for ninety days because the audit window was extended.","source":"Signed audit policy 7"},
+    {"key":"config","scope":"harbor","text":"Edit config/harbor/lease_rules.toml to change the duration of worker leases.","source":"Configuration guide line 44"},
+    {"key":"storage","scope":"harbor","text":"Object storage is billed per byte transferred between regions.","source":"Storage invoice 11"},
+    {"key":"rotation","scope":"global","text":"Rotate expired credentials before granting the operator access to the console.","source":"Identity runbook 6"},
+    {"key":"noise","scope":"harbor","text":"Choose yellow reflective paint for the bicycle parking area.","source":"Facilities meeting 3"},
+    {"key":"private","scope":"other","text":"FlushLeaseJournal and config/harbor/lease_rules.toml are disabled in the other project.","source":"Other project control"}
+  ],
+  "links": [["purge-new","purge-old"],["batch-new","batch-old"]],
+  "questions": [
+    {"kind":"identifier","search":"config/harbor/lease_rules.toml","expected":"config","relevant":["config"]},
+    {"kind":"identifier","search":"FlushLeaseJournal","expected":"ledger","relevant":["ledger"]},
+    {"kind":"pt-br","search":"cópias de segurança criptografadas","expected":"archive","relevant":["archive"]},
+    {"kind":"pt-br","search":"renovação de credenciais vencidas para acessar o painel","expected":"rotation","relevant":["rotation"]},
+    {"kind":"pt-br","search":"comprovante durável de pagamento","expected":"ledger","relevant":["ledger"]},
+    {"kind":"conflict","search":"approved warehouse delivery policy after launch","expected":"batch-new","relevant":["batch-new"]},
+    {"kind":"conflict","search":"how long did the trial keep raw telemetry","expected":"purge-old","relevant":["purge-old"]},
+    {"kind":"conflict","search":"qual é o prazo atual de retenção de telemetria para auditoria","expected":"purge-new","relevant":["purge-new"]}
+  ]
+}

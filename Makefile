@@ -37,6 +37,7 @@ test-integration: build
 
 evaluate-memory: build
 	go run $(go_flags) ./tests/acceptance --memory "$(CURDIR)/build/bigbrain" tests/memory/fixture.json
+	go run $(go_flags) ./tests/acceptance --memory "$(CURDIR)/build/bigbrain" tests/memory/held-out.json
 	@model=$$(realpath "$$BIGBRAIN_EMBEDDINGS") && \
 	BIGBRAIN_EMBEDDINGS="$$model" go test $(go_flags) -run '^$$' -bench '^BenchmarkMemoryIndex$$' -benchmem ./internal/store
 
