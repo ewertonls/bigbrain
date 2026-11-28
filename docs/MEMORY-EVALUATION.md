@@ -153,21 +153,24 @@ and the Portuguese conflict query.
 | Held-out | Restart | 2,529.5 | 37.8 | 270.5 |
 | Held-out | One write | 42.7 | 37.9 | 293.8 |
 
-The following Blink measurements used the compiled CLI with the verified
-release on a separate GitHub-hosted Ubuntu 24.04 amd64 runner with Go 1.26.11.
-The runner verified that the inference processes could use Unix IPC and had
-no external IPv4 or IPv6 route. Its CLI reproduced the source hits and
-irrelevant counts from the store evaluation on both fixtures.
-[Linux validation log and artifacts](https://github.com/ewertonls/bigbrain/actions/runs/46123716970/job/140913570695)
+The following Blink measurements used Go 1.26.11 and the verified public
+bundle on GitHub-hosted Ubuntu 24.04 amd64 and macOS 15 ARM64 runners.
+Linux used a network namespace with no external routes. The macOS CLI and
+daemon ran under a per-process sandbox that denied IPv4 and IPv6, and the
+relocated package loaded its own LadybugDB dylib. Both runners verified named
+Unix IPC, reproduced the reported quality for both fixtures and matched the
+fresh missing-model control to associative retrieval. The GloVe timings above
+were collected on a separate host.
+[Linux job](https://github.com/ewertonls/bigbrain/actions/runs/46124550232/job/140916145941) · [macOS job](https://github.com/ewertonls/bigbrain/actions/runs/46124550232/job/140916145615)
 
-| Blink data | Cache state | First query (ms) | Warm p95 (ms) | Daemon RSS (MiB) |
-| --- | --- | ---: | ---: | ---: |
-| Original | Fresh | 243.8 | 22.6 | 178.9 |
-| Original | Restart | 239.9 | 24.7 | 179.4 |
-| Original | One write | 18.7 | 25.0 | 197.7 |
-| Held-out | Fresh | 442.1 | 30.2 | 178.1 |
-| Held-out | Restart | 227.1 | 39.1 | 176.1 |
-| Held-out | One write | 13.0 | 31.9 | 204.8 |
+| Fixture | Cache state | Linux first (ms) | Linux p95 (ms) | Linux RSS (MiB) | macOS first (ms) | macOS p95 (ms) | macOS RSS (MiB) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Original | Fresh | 372.2 | 34.0 | 177.2 | 388.0 | 47.6 | 157.3 |
+| Original | Restart | 368.6 | 32.1 | 178.3 | 380.9 | 48.0 | 157.5 |
+| Original | One write | 25.0 | 31.8 | 197.2 | 43.8 | 48.8 | 171.1 |
+| Held-out | Fresh | 378.5 | 48.7 | 177.8 | 275.9 | 61.2 | 154.4 |
+| Held-out | Restart | 376.6 | 47.1 | 178.1 | 362.8 | 60.7 | 156.6 |
+| Held-out | One write | 17.7 | 47.5 | 205.1 | 23.9 | 41.8 | 176.6 |
 
 ### Reproduction
 
@@ -183,9 +186,9 @@ that IPv4 and IPv6 have no external route while Unix IPC works. The macOS
 ARM64 job runs the relocated package outside the checkout and verifies the
 loaded LadybugDB dylib. It tests a per-process sandbox for IPv4/IPv6 denial
 and named Unix IPC before running the CLI. If the host cannot enforce that
-profile, the log identifies the run as native macOS with networking available. Both jobs
-generate official reference vectors and save per-query results, timings and
-RSS for both fixtures as JSON artifacts.
+profile, the log identifies the run as native macOS with networking available.
+Both jobs exercise the configured Codex plugin launcher, generate official
+reference vectors and save per-query results, timings and RSS as JSON artifacts.
 [Release validation workflow](../.github/workflows/blink-release.yml)
 
 ```sh

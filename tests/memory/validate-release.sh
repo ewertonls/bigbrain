@@ -27,7 +27,10 @@ if [[ -f "$repo/internal/blink/testdata/blink.json" ]]; then
 fi
 (cd "$repo/internal/store" && "$work/store.test" -test.v \
     -test.run '^Test(BlinkCutoffCalibration|VectorCacheAcrossScopesAndRestarts|VectorRebuildResumesCommittedWork|DamagedVectorEntryAndUnavailableCache)$')
-python3 "$repo/tests/memory/cli_blink.py" "$binary" "$work/model"
+mkdir -p "$work/plugin-state"
+printf '%s\n' "$binary" > "$work/plugin-state/executable.path"
+BIGBRAIN_CODEX_STATE="$work/plugin-state" python3 "$repo/tests/memory/cli_blink.py" \
+    "$repo/plugins/bigbrain/scripts/bigbrain" "$work/model"
 for fixture in fixture held-out; do
     "$work/acceptance" --memory "$binary" "$repo/tests/memory/$fixture.json" | tee "$work/results/$fixture.json"
 done

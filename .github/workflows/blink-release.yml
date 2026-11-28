@@ -9,6 +9,7 @@ on:
       - '.github/workflows/blink-release.yml'
       - 'cmd/bigbrain/**'
       - 'internal/**'
+      - 'plugins/bigbrain/scripts/bigbrain'
       - 'scripts/blink.sha256'
       - 'scripts/download-*.sh'
       - 'tests/acceptance/**'
